@@ -1,0 +1,24 @@
+from setuptools import setup
+
+setup(
+    name='iconfuv',
+    version='1',
+    packages=['airglow'],
+    author="Ulas Kamaci",
+    author_email="ukamaci2@illinois.edu",
+    description="ICON FUV Nighttime Imaging Simulations",
+    long_description=open('README.md').read(),
+    license="GPLv3",
+    keywords="icon fuv processing",
+    url="https://github.com/uiuc-sine/icon-fuv",
+    install_requires=[
+        "matplotlib",
+        "netCDF4",
+        "numpy",
+        "scipy",
+	"apexpy"
+    ],
+    classifiers=[
+        "Programming Language :: Python :: 2",
+    ]
+)
