@@ -1688,7 +1688,6 @@ def Get_lvl2_5_product(file_input = None,
                        file_output = None,
                        file_GPI = None,
                        Spherical = True,
-                       weight_resid = True,
                        stripenum = None,
                        regu_order = 2):
     '''
@@ -1726,7 +1725,7 @@ def Get_lvl2_5_product(file_input = None,
     # specify the regularization method as the Tikhonov regularization
     reg_method = 'Tikhonov'
     # specify if whitening will occur in the inversion
-    # weight_resid = True
+    weight_resid = False
 
     try:
         # Open input Level 1 and ancillary NetCDF files
@@ -1960,7 +1959,6 @@ def Get_lvl2_5_product(file_input = None,
                     FUV_quality_flag[ind,stripe] = quality_flag
                     exception_counter += 1
                 except Exception as e:
-                    raise
                     if hasattr(e, 'message'):
                         print 'Unknown inversion error: (%s)' % e.message
                     else:
@@ -2033,7 +2031,6 @@ def Get_lvl2_5_product(file_input = None,
     try:
         FUV_Level_2_OutputProduct_NetCDF(file_output, L25_dict)
     except Exception as e:
-        raise
         if hasattr(e, 'message'):
             print 'Error writing netCDF output file: (%s)' % e.message
         else:
