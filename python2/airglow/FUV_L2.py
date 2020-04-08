@@ -1457,7 +1457,7 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
 "less than 1, if that is the case. This is a binary coded integer whose binary representation indicates the quality conditions which were "
 "present during or before the inversion. Here are the quality conditions represented by each digit: \n"
 "1: Error occured during inversion. Makes the quality 0, no retrieval available. \n"
-"2: Insufficient Level-1 data quality (see L1 quality flag). Makes the quality 0, no retrieval available. \n"
+"2: No reliable quality L1 data available (see L1 quality flag). Makes the quality 0, no retrieval produced. \n"
 "4: Very low input signal level (very low brightness). Makes the quality 0, retrieval available. \n"
 "8: Low input signal level (low brightness). Makes the quality 0.5, retrieval available. \n"
 "16: Unexpected hmF2 value. Makes the quality 0.5, retrieval available."
