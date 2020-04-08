@@ -1,8 +1,8 @@
 from setuptools import setup
 
 setup(
-    name='iconfuv',
-    version='1',
+    name='icon-fuv',
+    version="1",
     packages=['iconfuv'],
     author="Ulas Kamaci",
     author_email="ukamaci2@illinois.edu",

@@ -32,6 +32,7 @@ import apexpy
 # From the scipy module we need the optimize, linalg.sqrtm, io.netcdf, interpolate.interp1d
 import scipy
 from scipy import interpolate
+from scipy.ndimage import median_filter
 
 # From the time modeule we need the gmtime, strftime functions
 import time
@@ -725,23 +726,6 @@ def calculate_electron_density(VER,satlatlonalt,tang_altitude,dt,Sig_VER=None,co
     else:
         return Ne
 
-def find_latm_lonm_F2(lat_vector,lon_vector,alt_vector,hmF2):
-    '''
-    Calculates the latitude and longitude of the peak point of an O+ profile
-    INPUTS:
-        lat_vector     - latitude vector [km]
-        lon_vector     - longitude vector [km]
-        alt_vector     - altitude vector [km]
-        hmF2           - altitude of the maximum intensity point of the O+ profile
-    RETURN:
-        latmF2         - latitude of the maximum intensity point of the O+ profile
-        lonmF2         - longitude of the maximum intensity point of the O+ profile
-        idx            - index of the maximum intensity point of the O+ profile
-    '''
-    idx = (np.abs(alt_vector - hmF2)).argmin()
-    latmF2 = np.squeeze(lat_vector)[idx]
-    lonmF2 = np.squeeze(lon_vector)[idx]
-    return latmF2, lonmF2, idx
 
 '''
 EXTRACT F2 PEAK DENSITY AND HEIGHT
@@ -1168,8 +1152,6 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
     ncfile.createDimension('Epoch',t)
     ncfile.createDimension('Altitude', n)
     ncfile.createDimension('Stripe',6)
-    ncfile.createDimension('CheckedVariables',4)
-    ncfile.createDimension('CheckedAttributes',5)
 
     # Get instrument name (FUVA or FUVB)
     inst = 'FUVA' # TODO: This needs to be automatically calculated
@@ -1286,7 +1268,7 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
 "implicit in the inversion that the emission rate is constant within the layer between tangent altitudes).")
 
     # FUV look direction AZ and ZE
-    var = _create_variable(ncfile, 'ICON_L25_Solar_Azimuth_Angle', L25_dict['FUV_AZ'],
+    var = _create_variable(ncfile, 'ICON_L25_Solar_Azimuth_Angle_Profile', L25_dict['FUV_AZ'],
                           dimensions=('Epoch','Altitude','Stripe'),
                           format_nc='f8', format_fortran='F', desc='FOV Celestial Azimuth',
                           display_type='Time_Series', field_name='FOV Celestial Azimuth', fill_value=-999, label_axis='Time', bin_location=0.5,
@@ -1296,7 +1278,7 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
                           notes="The azimuth angles associated with the brightness measurements. Each pixel of the instrument has "
 "its own azimuth angle associated with its line of sight.")
 
-    var = _create_variable(ncfile, 'ICON_L25_Solar_Zenith_Angle', L25_dict['FUV_ZE'],
+    var = _create_variable(ncfile, 'ICON_L25_Solar_Zenith_Angle_Profile', L25_dict['FUV_ZE'],
                           dimensions=('Epoch','Altitude','Stripe'),
                           format_nc='f8', format_fortran='F', desc='FOV Celestial Zenith',
                           display_type='Time_Series', field_name='FOV Celestial Zenith', fill_value=-999, label_axis='Time', bin_location=0.5,
@@ -1386,6 +1368,15 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
                           notes="The geodetic longitudes of the peak O+ densities that are obtained by performing nearest neighbor interpolation "
 "on each profile.")
 
+    var = _create_variable(ncfile, 'ICON_L25_Solar_Zenith_Angle', L25_dict['FUV_szamF2'],
+                          dimensions=('Epoch','Stripe'),
+                          format_nc='f4', format_fortran='F', desc='Solar zenith angles of NmF2 points',
+                          display_type='Time_Series', field_name='NmF2 solar zenith angle', fill_value=-999, label_axis='Time', bin_location=0.5,
+                          units='degrees', valid_min=0., valid_max=180., var_type='support_data',
+                          chunk_sizes=[1,1],
+                          depend_0 = 'Epoch', depend_1='Stripe',
+                          notes="The solar zenith angles of the retrieved NmF2 points.")
+
     var = _create_variable(ncfile, 'ICON_L25_Magnetic_Latitude', L25_dict['FUV_latmF2_magnetic'],
                           dimensions=('Epoch','Stripe'),
                           format_nc='f4', format_fortran='F', desc='Estimated latitudes of the peak O+ densities',
@@ -1449,52 +1440,28 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
                           display_type='Time_Series', field_name='Quality', fill_value=-999, label_axis='Time', bin_location=0.5,
                           units=' ', valid_min=0.0, valid_max=1.0, var_type='data', chunk_sizes=[1,1],
                           depend_0 = 'Epoch',depend_1='Stripe',
-                          notes="While the intent is that the variable ICON_L2_FUVA_SWP_O+_Density_Error accurately characterizes "
+                          notes="While the intent is that the variable ICON_L25_O_Plus_Density_Error accurately characterizes "
 "the statistical error in the O+ density data, it is possible that systematic errors are present, or that the statistical error "
 "estimation is not accurate. If it is suspected that this is the case, the quality will be less than 1.0, which is determined based "
-"on the peak brightness values and other considerations. If the data are definitely unusable, the quality will be 0.0. Users should "
+"on the brightness values and other considerations. If the data are definitely unusable, the quality will be 0.0. Users should "
 "exercise caution when the quality is less than 1.0.")
 
-    # FUV inversion error code
-    var = _create_variable(ncfile, 'ICON_L25_Error_Code', L25_dict['FUV_Error_Code'],
-                          dimensions=('Epoch','Stripe','CheckedVariables','CheckedAttributes'),
-                          format_nc='i1', format_fortran='I', desc='Provides details about the observed inversion quality',
-                          display_type='Time_Series', field_name='Quality', fill_value=-999, label_axis='Time', bin_location=0.5,
-                          units=' ', valid_min=0.0, valid_max=1.0, var_type='data', chunk_sizes=[1,ncfile.dimensions['Stripe'].size,ncfile.dimensions['CheckedVariables'].size,ncfile.dimensions['CheckedAttributes'].size],
+    # FUV inversion quality code
+    var = _create_variable(ncfile, 'ICON_L25_Quality_Flags', L25_dict['FUV_Quality_Flags'],
+                          dimensions=('Epoch','Stripe'),
+                          format_nc='i4', format_fortran='I', desc='Provides description about the observed inversion quality',
+                          display_type='Time_Series', field_name='Quality Flags', fill_value=-999, label_axis='Time', bin_location=0.5,
+                          units=' ', valid_min=0, valid_max=31, var_type='data', chunk_sizes=[1,ncfile.dimensions['Stripe'].size],
                           depend_0 = 'Epoch',depend_1='Stripe',
-                          notes=["This error code is intended to inform the user of what variable(s) caused the inversion quality "
-"to be less than 1 (if it is the case). To do this, we check the values of some of the variables involved in the inversion to "
-"see whether they have unexpected values and negatively affect the inversion quality. For each inversion (meaning that at each "
-"nighttime Epoch instance and for each Stripe) we generate an array of dimension CheckedVariables by CheckedAttributes. Hence it "
-"becomes a 4 dimensional array where the third and fourth dimensions represent the checked variable and the checked attribute "
-"while the first and second dimensions represent Epoch and Stripe. The ordered list of variables and attributes are: ",
-"Variables: ",
-"    0: Brightness profile of 135.6 nm emissions (valid range: [0,2500] R) ",
-"    1: Estimated VER profile (valid range: [0,10] ph/cm^3/s) ",
-"    2: O+ density profile  (valid range: [-0.1,4e6] 1/cm^3) ",
-"    3: Inversion error (binary variable) ",
-"Attributes: ",
-"    0: Does the variable have any nan (not a number) value? (0,1) 0:False - 1:True ",
-"    1: Does the variable take any value out of its valid range? (0,1) 0:False - 1:True ",
-"    2: What is the peak brightness value? (0,0.5,1) 0: peak > 20R , 0.5: 20R > peak > 5R , 1: 5R > peak ",
-"    3: Does the peak of O+ density profile occur at the highest observed tangent altitude? (0,1) 0:False - 1:True ",
-"    4: Is there any inversion error? (0,1) 0:False - 1:True ",
-"Note that some attributes are variable specific. Here is the list of attributes that each variable have: ",
-" Variable 0: Attributes 0,1,2 ",
-" Variable 1: Attributes 0,1 ",
-" Variable 2: Attributes 0,1,3 ",
-" Variable 3: Attributes 4 ",
-"The array takes the default value 0 for the unmatched (variable,attribute) entries. ",
-"Note 1: If the Attribute 3 is True, the peak of O+ profile occurs at the highest observed altitude, which means that hmF2 cannot "
-"be estimated with the current data because it is out of the range of the observed altitudes. ",
-"Note 2: Inversion error in Attribute 4 indicates an error occured in the code, which is caught by a try-except block. ",
-"How is the inversion quality determined based on the error code (for each inversion)? : "
-"If the sum of all elements in the "
-"error_code array is 0, this means that there is no problem, and inversion quality becomes 1. If the sum is greater than 0, then "
-"the inversion quality becomes either 0.5 (meaning: be cautious using the data), or 0 (meaning: don’t use the data). In this "
-"case, if the inversion error attribute is 1, or peak brightness attribute is 1, then the inversion quality becomes 0, otherwise "
-"0.5. "]
-                          )
+                          notes="This variable is intended to provide description to the user why `ICON_L25_Quality` is "
+"less than 1, if that is the case. This is a binary coded integer whose binary representation indicates the quality conditions which were "
+"present during or before the inversion. Here are the quality conditions represented by each digit: \n"
+"1: Error occured during inversion. Makes the quality 0, no retrieval available. \n"
+"2: Insufficient Level-1 data quality (see L1 quality flag). Makes the quality 0, no retrieval available. \n"
+"4: Very low input signal level (very low brightness). Makes the quality 0, retrieval available. \n"
+"8: Low input signal level (low brightness). Makes the quality 0.5, retrieval available. \n"
+"16: Unexpected hmF2 value. Makes the quality 0.5, retrieval available."
+)
 
     # Inversion Method
     var = _create_variable(ncfile, 'ICON_L25_Inversion_Method', L25_dict['inv_method'],
@@ -1564,6 +1531,154 @@ def set_variable_attributes(var, catdesc, depend, displayType, Fieldname, form, 
     # 3.3.3.13
     var.Var_Type = varType
 
+def sliding_min(x, winsize=5, mode='reflect'):
+    '''
+    Applies moving minimum filter with the window size of `winsize`.
+    INPUTS:
+        x - 1d or 2d ndarray. if 2d, function is applied recursively on the
+            second dimension
+        winsize - integer specifying the window size
+        mode - string specifying how to treat the array boundary (goes into np.pad)
+    OUTPUTS:
+        out - filtered array with the same dimension as the input
+    '''
+    if len(x.shape) == 1:
+        out = np.zeros_like(x)
+        padfront = int((winsize-1)/2)
+        padafter = winsize - 1 - padfront
+        padded = np.pad(x, (padfront, padafter), mode=mode)
+        for i in range(len(x)):
+            out[i] = np.min(padded[i: i + winsize])
+        return out
+    elif len(x.shape) == 2:
+        out = np.zeros_like(x)
+        for i in range(x.shape[0]):
+            out[i] = sliding_min(x[i])
+        return out
+
+def medfilt3d(br, br_err, threshold=50, win_size=(5,10,10)):
+    '''
+    Function that performs star removal on an orbit of nighttime l1 brightness
+    profiles.
+
+    It operates on 3d images (stripe, epoch, altitude) rather than  individual
+    1d (altitude) profiles to exploit the information to its best. The star
+    detection works based on sliding a 3d window in the data and comparing the
+    center element's value with the median of the window. If the value is above
+    a threshold, the center pixel is marked as a star and its value is replaced
+    with the median of that window. Window size and threshold are determined
+    empirically.
+    INPUTS:
+        br - (6,night_ind,256) array of brightness profile for a particular orbit
+        br_err - (6,night_ind,256) array of uncertainty profile for a particular orbit
+    OUTPUTS:
+        br_corrected - star removed and hot pixel corrected brightness profile
+        br_err_modified - modified uncertainty profile according to the correction
+    '''
+    uncertainty_factor = 4
+    br = br.copy()
+    br_med = median_filter(br, size=win_size)
+    br_diff = br - br_med
+    filter = br_diff > threshold
+    br_filt = br.copy()
+    ind = (filter==1)
+    br_filt[ind] = br_med[ind]
+    br_err[ind] = uncertainty_factor*np.sqrt(br_filt[ind])
+    return filter, br_filt, br_err
+
+def hot_pixel_correction(br, br_err):
+    '''
+    Function that performs hot pixel correction. It operates on 3d
+    (stripe,epoch,altitude) orbit images individually. Operates on stripes
+    independently.
+
+    The method exploits the fact that hot pixels consistently have high values
+    through time along the orbit. Therefore, it takes the average of the 3d
+    (stripe,epoch,altitude) profile along the epoch dimension. Idea is that
+    the averaged profile will reveal the hot pixels. Then a moving minimum
+    filter is applied on the averaged profile to estimate the underlying true
+    signal. The difference between the averaged profile and the minimum filter
+    is subtracted from the profiles to finalize the hot pixel correction.
+    INPUTS:
+        br - (6,night_ind,256) array of brightness profile for a particular orbit
+        br_err - (6,night_ind,256) array of uncertainty profile for a particular orbit
+    OUTPUTS:
+        br_corrected - hot pixel corrected brightness profile
+        br_err_modified - modified uncertainty profile according to the correction
+    '''
+    uncertainty_factor = 4
+    brx = np.mean(br, axis=1)
+    brx_min = sliding_min(brx, winsize=5)
+    br_cor = br.copy()
+    for i in range(6):
+        diff = brx[i] - brx_min[i]
+        br_cor[i] -= diff
+    br_cor[br_cor < 0] = 1e-4
+    br_err = uncertainty_factor*np.sqrt(br_cor)
+    return br_cor, br_err
+
+def l1_correction_orbit(br, br_err):
+    '''
+    Function that performs pre-processing on the l1 brightness profiles together
+    with their uncertainties. It performs star removal and hot pixel correction.
+    It operates on 3d (stripe,epoch,altitude) orbit images individually.
+    INPUTS:
+        br - (6,night_ind,256) array of brightness profile for a particular orbit
+        br_err - (6,night_ind,256) array of uncertainty profile for a particular orbit
+    OUTPUTS:
+        br_corrected - star removed and hot pixel corrected brightness profile
+        br_err_modified - modified uncertainty profile according to the correction
+    '''
+    # apply star removal
+    _, br_corrected, br_err_mod = medfilt3d(br, br_err, threshold=50)
+    # apply hot pixel correction
+    br_corrected, br_err_mod = hot_pixel_correction(br_corrected, br_err_mod)
+    # apply star removal again since it can detect the stars better now
+    _, br_corrected, br_err_mod = medfilt3d(br_corrected, br_err_mod, threshold=10)
+    return br_corrected, br_err_mod
+
+def l1_preprocessing(l1):
+    '''
+    Code that performs pre-processing on the l1 brightness profiles together
+    with their uncertainties. It performs star removal and hot pixel correction.
+    INPUTS:
+        l1 - the l1 netCDF dataset
+    OUTPUTS:
+        FUV_1356_IMAGE - ndarray containing corrected brightness profiles
+        FUV_1356_ERROR - ndarray containing modified uncertainty profiles
+    '''
+    mirror_dir = ['M9','M6','M3','P0','P3','P6']
+    shape_l1 = l1.variables['ICON_L1_FUVA_SWP_PROF_M6'].shape
+    FUV_1356_IMAGE = np.zeros(shape_l1 + (6,))
+    FUV_1356_ERROR = np.zeros(shape_l1 + (6,))
+    for ind, d in enumerate(mirror_dir):
+        FUV_1356_IMAGE[:,:,ind] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % d][:]
+        FUV_1356_ERROR[:,:,ind] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % d][:]
+    mode = l1.variables['ICON_L1_FUV_Mode'][:]
+    mode_night = (mode == 2).astype(np.int)
+    nights = np.diff(mode_night, prepend=0)
+    nights[nights==-1] = 0
+    idxs = np.where(mode==2)[0][:]
+    nights = np.cumsum(nights)[idxs]
+    for night in np.unique(nights):
+        night_ind = np.where(nights==night)[0]
+        br = np.zeros((6, len(night_ind), 256))
+        br_err = np.zeros((6, len(night_ind), 256))
+        mask = np.zeros_like(br, dtype=np.bool)
+        for i in range(6):
+            tmp = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[i]][idxs[night_ind],:]
+            br_err[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[i]][idxs[night_ind],:].filled(fill_value=0)
+            mask[i] = tmp.mask
+            br[i] = tmp.filled(fill_value=0)
+        br_corrected, br_err_modified = l1_correction_orbit(br, br_err)
+        for i in range(6):
+            FUV_1356_IMAGE[idxs[night_ind],:,i] = np.ma.array(
+                br_corrected[i], mask=mask[i]
+            ).filled(fill_value=np.nan)
+            FUV_1356_ERROR[idxs[night_ind],:,i] = np.ma.array(
+                br_err_modified[i], mask=mask[i]
+            ).filled(fill_value=np.nan)
+    return FUV_1356_IMAGE, FUV_1356_ERROR
 
 '''
 FUV LEVEL 2 TOP LEVEL FUNCTION
@@ -1573,6 +1688,8 @@ def Get_lvl2_5_product(file_input = None,
                        file_output = None,
                        file_GPI = None,
                        Spherical = True,
+                       weight_resid = True,
+                       stripenum = None,
                        regu_order = 2):
     '''
     Operational Code that reads Lvl1 file and creates the corresponding Lvl2.5
@@ -1609,7 +1726,7 @@ def Get_lvl2_5_product(file_input = None,
     # specify the regularization method as the Tikhonov regularization
     reg_method = 'Tikhonov'
     # specify if whitening will occur in the inversion
-    weight_resid = False
+    # weight_resid = True
 
     try:
         # Open input Level 1 and ancillary NetCDF files
@@ -1664,18 +1781,12 @@ def Get_lvl2_5_product(file_input = None,
         # Read the orbit number
         ICON_ORBIT = ancillary.variables['ICON_ANCILLARY_FUV_ORBIT_NUMBER'][:]
 
-        # Get Data from file.
-        # L1 data stores the individual stripes in different variables. Read them
-        # all stripes and combine into a single variable
+        # Get brightness and uncertainty profiles from file after pre-processing.
         mirror_dir = ['M9','M6','M3','P0','P3','P6']
-        FUV_1356_IMAGE = np.zeros(np.shape(FUV_AZ))
-        FUV_1356_ERROR = np.zeros(np.shape(FUV_AZ))
-        for ind, d in enumerate(mirror_dir):
-            FUV_1356_IMAGE[:,:,ind] = data.variables['ICON_L1_FUVA_SWP_PROF_%s' % d][:]
-            FUV_1356_ERROR[:,:,ind] = data.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % d][:]
+        FUV_1356_IMAGE, FUV_1356_ERROR = l1_preprocessing(data)
 
         # Get observation times from file and store in a datetime variable
-        temp = ancillary.variables['ICON_ANCILLARY_FUV_TIME_UTC']
+        temp = data.variables['ICON_L1_FUVA_SWP_Center_Times']
         FUV_dn = []
         for d in temp:
             FUV_dn.append(parser.parse(d))
@@ -1684,10 +1795,13 @@ def Get_lvl2_5_product(file_input = None,
         # The FUV epoch
         FUV_EPOCH = data.variables['Epoch'][:]
 
-        # Get science mode
-        FUV_mode = ancillary.variables['ICON_ANCILLARY_FUV_ACTIVITY'][:]
+        # l1 quality flag - use if 0(LVLH) or 1(R-LVLH)
+        l1_quality = data.variables['ICON_L1_FUVA_SWP_Quality_Flag'][:]
 
-        if FUV_mode[FUV_mode==258].shape[0] == 0:
+        # Get science mode
+        FUV_mode = data.variables['ICON_L1_FUV_Mode'][:]
+
+        if FUV_mode[FUV_mode==2].shape[0] == 0:
             print 'No nighttime data to process. Output file will not be produced.'
             return 0
 
@@ -1697,6 +1811,7 @@ def Get_lvl2_5_product(file_input = None,
         FUV_Ne = np.zeros(np.shape(FUV_1356_IMAGE))*np.nan
         FUV_sigma_Ne = np.zeros(np.shape(FUV_1356_IMAGE))*np.nan
         FUV_hmF2 = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
+        FUV_szamF2 = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
         FUV_latmF2 = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
         FUV_lonmF2 = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
         FUV_latmF2_magnetic = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
@@ -1706,10 +1821,13 @@ def Get_lvl2_5_product(file_input = None,
         FUV_local_time = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
         FUV_sigma_NmF2 = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
         FUV_quality = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
-        FUV_error_code = np.zeros((len(FUV_dn),len(mirror_dir),4,5))*np.nan
+        FUV_quality_flag = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
+        FUV_l1_quality_flag = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
         FUV_tangent_lat = np.zeros(np.shape(FUV_TANGENT_LATITUDES))*np.nan
         FUV_tangent_lon = np.zeros(np.shape(FUV_TANGENT_LONGITUDES))*np.nan
         FUV_tangent_alt = np.zeros(np.shape(FUV_TANGENT_ALTITUDES))*np.nan
+        FUV_sza = np.zeros(np.shape(FUV_TANGENT_ALTITUDES))*np.nan
+        FUV_az = np.zeros(np.shape(FUV_TANGENT_ALTITUDES))*np.nan
 
         # Variables to keep track of the indices of the valid range of limb pixels
         min_li = 9999
@@ -1730,17 +1848,25 @@ def Get_lvl2_5_product(file_input = None,
 
     # Work on each individual stripe
     for stripe, d in enumerate(mirror_dir):
+        if stripenum is not None:
+            if stripe != stripenum:
+                continue
         night_ind = []
-        for ind, mode in enumerate(FUV_mode):
+        for ind, (mode, l1_qual) in enumerate(zip(FUV_mode, l1_quality)):
             # Check if we are in night mode
             print('{}/{} - {}/{}'.format(stripe+1, 6, ind+1, len(FUV_mode)))
-            if mode == 258:
+            if mode==2:
                 try:
-                    inversion_counter += 1
                     # We are in nighttime science mode, process the data
                     # Save the index of this measurement
                     night_ind.append(ind)
+                    if not (l1_qual==0 or l1_qual==1):
+                        inv_quality, quality_flag = quality_check(l1_quality=l1_qual)
+                        FUV_quality[ind,stripe] = inv_quality
+                        FUV_quality_flag[ind,stripe] = quality_flag
+                        continue
 
+                    inversion_counter += 1
                     # Vector with the space craft lat, lon, alt at the measurement time
                     satlatlonalt = [ICON_WGS84_LATITUDE[ind],ICON_WGS84_LONGITUDE[ind],ICON_WGS84_ALTITUDE[ind]]
 
@@ -1791,13 +1917,17 @@ def Get_lvl2_5_product(file_input = None,
                     FUV_tangent_lat[ind,limb_i,stripe] = np.squeeze(FUV_TANGENT_LATITUDES[ind,limb_i0,stripe])[::-1]
                     FUV_tangent_lon[ind,limb_i,stripe] = np.squeeze(FUV_TANGENT_LONGITUDES[ind,limb_i0,stripe])[::-1]
                     FUV_tangent_alt[ind,limb_i,stripe] = h_centered
+                    FUV_sza[ind,limb_i,stripe] = ze
+                    FUV_az[ind,limb_i,stripe] = az
 
 
                     # Calculate hmF2 and NmF2
                     hm,Nm,sig_hm,sig_Nm = find_hm_Nm_F2(Ne,h_centered,Sig_NE=Sig_Ne)
                     # Calculate latmF2 and lonmF2
-                    latm,lonm,idx_hmf2 = find_latm_lonm_F2(FUV_tangent_lat[ind,limb_i,stripe],
-                        FUV_tangent_lon[ind,limb_i,stripe],h_centered,hm)
+                    idx_hmf2 = (np.abs(h_centered - hm)).argmin()
+                    latm = np.squeeze(FUV_tangent_lat[ind,limb_i,stripe])[idx_hmf2]
+                    lonm = np.squeeze(FUV_tangent_lon[ind,limb_i,stripe])[idx_hmf2]
+                    FUV_szamF2[ind, stripe] = ze[idx_hmf2]
                     # Calculate the magnetic latitude and longitudes
                     apex_point = apexpy.Apex(date=FUV_dn[ind].year)
                     lat_magnetic,lon_magnetic = apex_point.convert(
@@ -1814,10 +1944,10 @@ def Get_lvl2_5_product(file_input = None,
                     FUV_local_time[ind,stripe] = local_time[ind, 255-idx_hmf2, stripe]
 
                     # Check the input, ancillary, and output variables
-                    inv_quality, error_code = variable_checker(bright, h, satlatlonalt, az, ze, ver = ver, Ne = Ne)
+                    inv_quality, quality_flag = quality_check(bright=bright, Ne=Ne, hmF2=hm, l1_quality=l1_qual)
 
                     FUV_quality[ind,stripe] = inv_quality
-                    FUV_error_code[ind,stripe,:,:] = error_code
+                    FUV_quality_flag[ind,stripe] = quality_flag
 
                 except ImportError as error:
                     print "You don't have module {0} installed".format(error.message[16:])
@@ -1826,17 +1956,18 @@ def Get_lvl2_5_product(file_input = None,
                     # Just an error in the inversion
                     print 'ind: %d, stripe: %d, error: %s' %(ind,stripe,sys.exc_info()[0])
                     FUV_quality[ind,stripe] = 0.0
-                    _, error_code = variable_checker(bright, h, satlatlonalt, az, ze, inv_error = 1)
-                    FUV_error_code[ind,stripe,:,:] = error_code
+                    inv_quality, quality_flag = quality_check(bright=bright, l1_quality=l1_qual, inv_error = 1)
+                    FUV_quality_flag[ind,stripe] = quality_flag
                     exception_counter += 1
                 except Exception as e:
+                    raise
                     if hasattr(e, 'message'):
                         print 'Unknown inversion error: (%s)' % e.message
                     else:
                         print "Unknown inversion error"
                     FUV_quality[ind,stripe] = 0.0
-                    _, error_code = variable_checker(bright, h, satlatlonalt, az, ze, inv_error = 1)
-                    FUV_error_code[ind,stripe,:,:] = error_code
+                    inv_quality, quality_flag = quality_check(bright=bright, l1_quality=l1_qual, inv_error = 1)
+                    FUV_quality_flag[ind,stripe] = quality_flag
                     exception_counter += 1
 
     # The master index for limb scan indexes
@@ -1845,17 +1976,15 @@ def Get_lvl2_5_product(file_input = None,
     # Inversion is complete. Form the output dictionary
     L25_dict = {
         'FUV_EPOCH': FUV_EPOCH[night_ind],
-        'FUV_CENTER_TIMES': ancillary.variables['ICON_ANCILLARY_FUV_TIME_UTC'][:][night_ind],
-        # 'FUV_START_TIMES': data.variables['ICON_L1_FUV_SWP_Start_Times'][:][night_ind],
-        # 'FUV_STOP_TIMES': data.variables['ICON_L1_FUV_SWP_Stop_Times'][:][night_ind],
+        'FUV_CENTER_TIMES': data.variables['ICON_L1_FUVA_SWP_Center_Times'][:][night_ind],
         'FUV_START_TIMES': data.variables['ICON_L1_FUVA_SWP_Start_Times'][:][night_ind],
         'FUV_STOP_TIMES': data.variables['ICON_L1_FUVA_SWP_Stop_Times'][:][night_ind],
         'FUV_dn': FUV_dn[night_ind],
         'FUV_TANGENT_LAT': FUV_tangent_lat[night_ind,min_li:max_li+1,:],
         'FUV_TANGENT_LON': FUV_tangent_lon[night_ind,min_li:max_li+1,:],
         'FUV_TANGENT_ALT': FUV_tangent_alt[night_ind,min_li:max_li+1,:],
-        'FUV_AZ': FUV_AZ[night_ind,min_li:max_li+1,:],
-        'FUV_ZE': FUV_ZE[night_ind,min_li:max_li+1,:],
+        'FUV_AZ': FUV_az[night_ind,min_li:max_li+1,:],
+        'FUV_ZE': FUV_sza[night_ind,min_li:max_li+1,:],
         'ICON_WGS_LATITUDE': ICON_WGS84_LATITUDE[night_ind],
         'ICON_WGS_LONGITUDE': ICON_WGS84_LONGITUDE[night_ind],
         'ICON_WGS_ALTITUDE': ICON_WGS84_ALTITUDE[night_ind],
@@ -1870,11 +1999,12 @@ def Get_lvl2_5_product(file_input = None,
         'FUV_hmF2_error': FUV_sigma_hmF2[night_ind,:],
         'FUV_latmF2': FUV_latmF2[night_ind,:],
         'FUV_lonmF2': FUV_lonmF2[night_ind,:],
+        'FUV_szamF2': FUV_szamF2[night_ind,:],
         'FUV_latmF2_magnetic': FUV_latmF2_magnetic[night_ind,:],
         'FUV_lonmF2_magnetic': FUV_lonmF2_magnetic[night_ind,:],
         'FUV_local_time': FUV_local_time[night_ind,:],
         'FUV_Quality': FUV_quality[night_ind,:],
-        'FUV_Error_Code': FUV_error_code[night_ind,:],
+        'FUV_Quality_Flags': FUV_quality_flag[night_ind,:],
         'inv_method': "{}_{}".format(reg_method,regu_order),
         'Spherical': Spherical,
         'source_files': [file_input,file_ancillary],
@@ -1903,6 +2033,7 @@ def Get_lvl2_5_product(file_input = None,
     try:
         FUV_Level_2_OutputProduct_NetCDF(file_output, L25_dict)
     except Exception as e:
+        raise
         if hasattr(e, 'message'):
             print 'Error writing netCDF output file: (%s)' % e.message
         else:
@@ -2024,143 +2155,73 @@ def nan_checker(arr):
     else:
         return np.arange(len(arr)) # if not, don't do any operation
 
-def value_checker(variable = None, valid_min = None, valid_max = None):
+def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None,  inv_error=0):
     '''
-    Checks whether the input variable exceeds its valid max/min value, and also whether it has any nan value or not.
-    These 3 conditions are then output using a binary check list.
+    Checks a couple of variables and outputs an inversion quality together
+    with a quality code that describes quality conditions.
     INPUTS:
-        variable  - the input variable to be checked (a numpy array)
-        valid_max - maximum attainable valid value of the variable
-        valid_min - minimum attainable valid value of the variable
-    OUTPUT:
-        check_list - binary array of size 2. Zeroth element: does it have any nan value?
-                     First element: does it take value out of its valid range?
-    '''
-
-    check_list = np.zeros(2)
-
-    check_list[0] = np.isnan(variable).any()
-    check_list[1] = np.min(variable) < valid_min or np.max(variable) > valid_max
-
-    return check_list
-
-
-def variable_checker(bright, alt_vector, satlatlonalt, az, ze, ver = None, Ne = None, inv_error = 0):
-    '''
-    This function checks the values of the input variables, and either terminates the process or generates an error code
-    based on the predetermined conditions. It is inacceptable for some input variables to have out of range values or
-    NaN (not a number) values. Hence, if this is the case, the whole process is terminated. The list of these variables are:
-    alt_vector - Tangent altitudes (valid range: [140,600] km)
-    satlatlonalt[0] - Satellite latitude (valid range: [-90,90] degrees)
-    satlatlonalt[1] - Satellite longitude (valid range: [0,360] degrees)
-    satlatlonalt[2] - Satellite altitude (valid range: [0,1000] km)
-    az - Azimuth Angles (valid range: [0,180] degrees)
-    ze - Zenith Angles (valid range: [90,135] degrees)
-    These conditions of the other variables are also checked together with some other conditions, and an output array
-    (error_code) is generated based on that. The error code is an N by M array, where N is the number of checked
-    variables, and M is the number of checked attributes.
-    The checked variables and attributes with the same order as in the error_code array are
-    Variables:
-    0: bright - Brightness profile of 135.6 nm emissions (valid range: [0,2500] R)
-    1: ver - Estimated VER profile (valid range: [0,10] ph/cm^3/s)
-    2: Ne - O+ density profile  (valid range: [-0.1,4e6] 1/cm^3)
-    3: inv_error - Inversion error (binary variable: 1/0)
-    Attributes:
-    0: Does the variable have any NaN value? (0,1) 0:False - 1:True
-    1: Does the variable take any value out of its valid range? (0,1) 0:False - 1:True
-    2: What is the peak brightness value? (0,0.5,1) 0: peak > 20R , 0.5: 20R > peak > 5R , 1: 5R > peak
-    3: Does the peak of O+ density profile occur at the highest observed tangent altitude? (0,1) 0:False - 1:True
-    4: Is there any inversion error? (0,1) 0:False - 1:True
-
-    Checked variables are listed in the INPUTs. Among those, some of them are included in the error code. Note that some
-    attributes are variable specific. Here is the list of attributes that each variable have:
-    bright: Attributes 0,1,2
-    ver: Attributes 0,1
-    Ne: Attributes 0,1,3
-    inv_error: Attributes 4
-    The array takes the default value 0 for the unmatched (variable,attribute) entries.
-
-    INPUTS:
-        bright - Brightness profile of 135.6 nm emissions (valid range: [0,2500] R)
-        alt_vector - Tangent altitudes (valid range: [140,600] km)
-        satlatlonalt[0] - Satellite latitude (valid range: [-90,90] degrees)
-        satlatlonalt[1] - Satellite longitude (valid range: [0,360] degrees)
-        satlatlonalt[2] - Satellite altitude (valid range: [0,1000] km)
-        az - Azimuth Angles (valid range: [0,180] degrees)
-        ze - Zenith Angles (valid range: [90,135] degrees)
-        ver - Estimated VER profile (valid range: [0,10] ph/cm^3/s)
-        Ne - O+ density profile  (valid range: [-0.1,4e6] 1/cm^3)
+        bright - artifact removed brightness profile of 135.6 nm emissions
+        Ne - retrieved O+ density profile
         inv_error - Inversion error (binary variable: 1/0)
-
+        l1_quality - quality flag for level 1 brightness profiles
     OUTPUTS:
-        error_code - N by M array, where N is the number of checked variables, and M is the number of checked attributes.
-            It takes the values 0, 0.5, or 1. It is coded such that 0 represents favorable, and 1 represents unfavorable
-            status. Hence, if the sum of all entries is not equal to 0, user should be cautious.
-        inv_quality - If the sum of all elements in the error_code array is 0, this means that there is no problem, and
-            inversion quality becomes 1. If the sum is greater than 0, then the inversion quality becomes either 0.5
-            (meaning: be cautious using the data), or 0 (meaning: don’t use the data). In this case, if the inversion error
-            attribute is 1, or peak brightness attribute is 1, then the inversion quality becomes 0, otherwise 0.5.
-
+        inv_quality - number that indicates the quality of inversion [0, 0.5, 1]
+            1: input data and retrieved data look nominal
+            0.5: be cautious using the data
+            0: don't use the data. data also may not be available due to inversion
+            error or inversion may not have been attempted due to low l1 quality
+        quality_code - binary coded integer whose binary representation
+            indicates the active quality flag(s) for the inversion
     '''
-
-    error_code = np.zeros((4,5))
-
-    assert len(alt_vector) > 0, 'Tangent altitudes array is empty!'
-    assert len(az) > 0, 'Azimuth angles array is empty!'
-    assert len(ze) > 0, 'Zenith angles array is empty!'
-
-    assert not np.isnan(alt_vector).any(), 'Tangent altitudes have NaN value(s)! '
-    assert not np.isnan(satlatlonalt[0]).any(), 'Satellite latitude has NaN value(s)! '
-    assert not np.isnan(satlatlonalt[1]).any(), 'Satellite longitude has NaN value(s)! '
-    assert not np.isnan(satlatlonalt[2]).any(), 'Satellite altitude has NaN value(s)! '
-    assert not np.isnan(az).any(), 'Azimuth angles have NaN value(s)! '
-    assert not np.isnan(ze).any(), 'Zenith angles have NaN value(s)! '
-
-    assert np.min(alt_vector) >= 140 and np.max(alt_vector) <= 600, 'Tangent altitudes out of its range [140,600] km!'
-    assert np.min(satlatlonalt[0]) >= -90 and np.max(satlatlonalt[0]) <= 90, 'Satellite latitude out of its range [-90,90] degrees!'
-    assert np.min(satlatlonalt[1]) >= 0 and np.max(satlatlonalt[1]) <= 360, 'Satellite longitude out of its range [0,360] degrees!'
-    assert np.min(satlatlonalt[2]) >= 0 and np.max(satlatlonalt[2]) <= 1000, 'Satellite altitude out of its range [0,1000] km!'
-    assert np.min(az) >= 0 and np.max(az) <= 180, 'Azimuth angles out of its range [0,180] degrees!'
-    assert np.min(ze) >= 90 and np.max(ze) <= 135, 'Zenith angles out of its range [90,135] km!'
-
     try:
+        # generate the binary code
+        inv_quality = 1
+        num_codes = 5
+        binary_code = np.zeros(num_codes)
+        # Digit 0: Error in the inversion
+        if inv_error is 1:
+            binary_code[0] = 1
+        # Digit 1: Insufficient L1 quality
+        if not (l1_quality==0 or l1_quality==1):
+            binary_code[1] = 1
+        # Digit 2: Very low input signal level
+        if bright is not None:
+            if np.mean(bright) < 10:
+                binary_code[2] = 1
+        # Digit 3: Low input signal level
+            elif np.mean(bright) < 15:
+                binary_code[3] = 1
+        # Digit 4: Unexpected hmF2 value
+        if Ne is not None:
+            if (np.argmax(Ne) < 10) or (hmF2 > 400):
+                binary_code[4] = 1
 
-        # Store whether there is an inversion error or not
-        error_code[3,4] = inv_error
-
-        # Error codes based on having nan values and staying in valid range of values
-        error_code[0,:2] = value_checker(variable = bright, valid_min = 0, valid_max = 2500)
-
-        if ver is not None:
-            error_code[1,:2] = value_checker(variable = ver, valid_min = 0, valid_max = 10)
-            error_code[2,:2] = value_checker(variable = Ne, valid_min = -0.1, valid_max = 4e6)
-            error_code[2,3] =  np.argmax(Ne) == 0
-
-        # Implement a simple quality metric based on the peak brightness value
-        if np.max(bright) > 20:
-            error_code[0,2] = 0
-        elif np.max(bright) > 5:
-            error_code[0,2] = 0.5
-        else:
-            error_code[0,2] = 1.0
-
-        # Determine the inversion quality based on the error code array
-        if np.sum(error_code) == 0:
-            inv_quality = 1
-        elif error_code[0,2] == 1:
+        # Calculate the inversion quality
+        if (
+            binary_code[0] == 1 or
+            binary_code[1] == 1 or
+            binary_code[2] == 1
+        ):
             inv_quality = 0
-        else:
+        elif (
+            binary_code[3] == 1 or
+            binary_code[4] == 1
+        ):
             inv_quality = 0.5
 
-    except Exception as e: # UNDO
-        if hasattr(e, 'message'):
-            print 'Error generating the error code: (%s)' % e.message
-        else:
-            print 'Error generating the error code'
-        inv_quality = 0
-        return inv_quality, error_code
+        quality_code = 0
+        for i in range(num_codes):
+            quality_code += (2**i) * binary_code[i]
 
-    return inv_quality, error_code
+    except Exception as e:
+        if hasattr(e, 'message'):
+            print 'Error generating the quality flag: (%s)' % e.message
+        else:
+            print 'Error generating the quality flag'
+        inv_quality = 0
+        return inv_quality, quality_code
+
+    return inv_quality, quality_code
 
 
 def CreateSummaryPlot(file_netcdf, png_stub, stripe=2, min_alt=None, max_alt=None,
@@ -2214,7 +2275,7 @@ def CreateSummaryPlot(file_netcdf, png_stub, stripe=2, min_alt=None, max_alt=Non
         for orbit in np.unique(orbits):
 
             try:
-                file_png = png_stub.split('v')[-2][:-12] + '-o%05d' % orbit + png_stub.split('v')[-2][-12:] + 'v' + png_stub.split('v')[-1]
+                file_png = '_'.join(png_stub.split('_')[:-2]) + '-o%05d_' % orbit + '_'.join(png_stub.split('_')[-2:])
                 orbit_ind = np.squeeze(np.where(orbits == orbit))
                 ds = np.array([i.total_seconds() for i in dn-dn[orbit_ind][0]])
                 orbit_ind = np.squeeze(np.where(abs(ds) < 2000.))
@@ -2299,7 +2360,7 @@ def CreateSummaryPlot(file_netcdf, png_stub, stripe=2, min_alt=None, max_alt=Non
                 axes[4].set_ylim([-.25,1.25])
                 plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
                 plt.gca().xaxis.set_major_locator(mdates.MinuteLocator(interval=10))
-                axes[4].set_title('Inversion quality flag')
+                axes[4].set_title('Inversion Quality')
                 axes[4].set_xlabel('Local Time\n LON\n LAT')
                 axes[4].xaxis.set_label_coords(-0.10, -0.060)
                 lgd = plt.legend(ncol=6,numpoints=1, bbox_to_anchor=(0.7, -0.43))

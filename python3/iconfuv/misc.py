@@ -106,9 +106,25 @@ def orientation_finder(br):
     sum = np.sum(sinogram[rad-10:rad+10], axis=0)
     return np.argmax(sum) * np.pi / 180.
 
-def get_br(date='2020-01-03', epoch=300, stripe=None, v=0, r=0):
-    file_l1='/home/kamo/resources/icon-fuv/nc_files/ICON_L1_FUV_SWP_{}_v{:02d}r{:03d}.NC'.format(date,v,r)
-    file_anc='/home/kamo/resources/icon-fuv/nc_files/ICON_L0P_FUV_Ancillary_{}_v01r000.NC'.format(date)
+def sliding_min(x, winsize=5, mode='reflect'):
+    if len(x.shape) == 1:
+        out = np.zeros_like(x)
+        padfront = int((winsize-1)/2)
+        padafter = winsize - 1 - padfront
+        padded = np.pad(x, (padfront, padafter), mode=mode)
+        for i in range(len(x)):
+            out[i] = np.min(padded[i: i + winsize])
+        return out
+    elif len(x.shape) == 2:
+        out = np.zeros_like(x)
+        for i in range(x.shape[0]):
+            out[i] = sliding_min(x[i])
+        return out
+
+
+def get_br(date='2020-01-03', epoch=300, stripe=None, v=2, r=0):
+    file_l1='/home/kamo/resources/iconfuv/nc_files/ICON_L1_FUV_SWP_{}_v{:02d}r{:03d}.NC'.format(date,v,r)
+    file_anc='/home/kamo/resources/iconfuv/nc_files/ICON_L0P_FUV_Ancillary_{}_v01r000.NC'.format(date)
     l1 = netCDF4.Dataset(file_l1, mode='r')
     anc = netCDF4.Dataset(file_anc, mode='r')
     mirror_dir = ['M9','M6','M3','P0','P3','P6']
@@ -127,6 +143,7 @@ def get_br(date='2020-01-03', epoch=300, stripe=None, v=0, r=0):
     print('Epoch:{}\nNight:{}\nNight Inds:[{}-{}]'.format(epoch, night, night_ind[0], night_ind[-1]))
     if stripe is not None:
         br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[stripe]][idxs[night_ind],100:]
+        br_err = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[stripe]][idxs[night_ind],100:].filled(fill_value=0)
         br.fill_value = br.min()
         br = br.filled()
         # try:
@@ -134,12 +151,42 @@ def get_br(date='2020-01-03', epoch=300, stripe=None, v=0, r=0):
         # except:
         #     br = np.array()
         # l1.close()
-        return br
+        return br, br_err
     br = np.zeros((6, len(night_ind), 156))
+    br_err = np.zeros((6, len(night_ind), 156))
     for i in range(6):
-        br[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[i]][idxs[night_ind],100:]
+        br[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[i]][idxs[night_ind],100:].filled(fill_value=0)
+        br_err[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[i]][idxs[night_ind],100:].filled(fill_value=0)
     l1.close()
-    return br
+    return br, br_err
+
+
+def get_br_nights(l1):
+    mirror_dir = ['M9','M6','M3','P0','P3','P6']
+    mode = l1.variables['ICON_L1_FUV_Mode'][:]
+    mode_night = (mode == 2).astype(np.int)
+    nights = np.diff(mode_night, prepend=0)
+    nights[nights==-1] = 0
+    idxs = np.where(mode==2)[0][:]
+    nights = np.cumsum(nights)[idxs]
+    brs = []
+    brs_err = []
+    mask_arr = []
+    for night in np.unique(nights):
+        night_ind = np.where(nights==night)[0]
+        br = np.zeros((6, len(night_ind), 256))
+        br_err = np.zeros((6, len(night_ind), 256))
+        mask = np.zeros_like(br, dtype=np.bool)
+        for i in range(6):
+            tmp = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[i]][idxs[night_ind],:]
+            br_err[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[i]][idxs[night_ind],:].filled(fill_value=0)
+            mask[i] = tmp.mask
+            br[i] = tmp.filled(fill_value=0)
+        brs.append(br)
+        brs_err.append(br_err)
+        mask_arr.append(mask)
+    return brs, brs_err, mask_arr, nights, idxs
+
 
 def shiftappend(im, w=[5,5]):
     ss, aa, bb = im.shape

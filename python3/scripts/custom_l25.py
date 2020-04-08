@@ -20,10 +20,10 @@ weight_resid = False
 Spherical = True
 regu_order = 2
 
-file_l1='nc_files/ICON_L1_FUV_SWP_{}_v02r000.NC'.format(date)
+file_l1='../../nc_files/ICON_L1_FUV_SWP_{}_v02r000.NC'.format(date)
 # file_l2='nc_files/ICON_L3_FUV_Oxygen-Profile-Night_{}_v01r000.NC'.format(date)
-file_anc='nc_files/ICON_L0P_FUV_Ancillary_{}_v01r000.NC'.format(date)
-file_GPI = 'nc_files/ICON_Ancillary_GPI_2015-001-to-2020-005_v01r000.NC'
+file_anc='../../nc_files/ICON_L0P_FUV_Ancillary_{}_v01r000.NC'.format(date)
+file_GPI = '../../nc_files/ICON_Ancillary_GPI_2015-001-to-2020-044_v01r000.NC'
 
 anc = netCDF4.Dataset(file_anc, mode='r')
 l1 = netCDF4.Dataset(file_l1, mode='r')

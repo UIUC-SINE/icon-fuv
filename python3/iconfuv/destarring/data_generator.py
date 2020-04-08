@@ -100,7 +100,7 @@ def gen_patches(mask, img):
                 patches_y.append(y_aug)
     return patches_x, patches_y
 
-
+# FIXME data_dir directory 
 def testgenerator(data_dir='../dataset/test'):
     # generate clean patches from a dataset
     file_list = glob.glob(data_dir+'/im*')  # get name list of all .png files

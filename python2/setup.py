@@ -1,8 +1,8 @@
 from setuptools import setup
 
 setup(
-    name='iconfuv',
-    version='1',
+    name='airglow',
+    version="1",
     packages=['airglow'],
     author="Ulas Kamaci",
     author_email="ukamaci2@illinois.edu",
@@ -16,7 +16,7 @@ setup(
         "netCDF4",
         "numpy",
         "scipy",
-	"apexpy"
+        "opencv-python"
     ],
     classifiers=[
         "Programming Language :: Python :: 2",

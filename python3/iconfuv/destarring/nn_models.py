@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 
-class unet(nn.Module):
-    def __init__(self, C=4):
-        super(unet, self).__init__()
-        # C = 8
+class unet_v1(nn.Module):
+    def __init__(self):
+        super(unet_v1, self).__init__()
+        C = 4
         self.conv1 = nn.Conv2d(1, C, (3, 3), (1, 1), (1, 1))
         self.batch1 = nn.BatchNorm2d(C)
         self.conv2 = nn.Conv2d(C, 2*C, (3, 3), (1, 1), (1, 1))
@@ -46,7 +46,6 @@ class unet(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.orthogonal_(m.weight)
-                print('init weight')
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
             elif isinstance(m, nn.BatchNorm2d):
@@ -79,7 +78,6 @@ class DnCNN(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.orthogonal_(m.weight)
-                print('init weight')
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
             elif isinstance(m, nn.BatchNorm2d):

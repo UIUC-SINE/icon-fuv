@@ -36,6 +36,7 @@ def tohban(l2=None, l1=None, anc=None, epoch=None, stripe=None):
     Op_lon = l2.variables['ICON_L25_Longitude'][:, stripe] # NmF2 longitudes
 
     orbit_ind = np.squeeze(np.where(orbits == orbit))
+    print('orbit indices:[{},{}]'.format(orbit_ind[0], orbit_ind[-1]))
 
     ds = np.array([i.total_seconds() for i in dn-dn[orbit_ind][0]])
     orbit_ind = np.squeeze(np.where(abs(ds) < 2000.))
@@ -185,7 +186,7 @@ def tohban2(file_l2=None, png_stub=None, file_l1=None, file_anc=None, stripe=Non
 
     for orbit in np.unique(orbits):
         try:
-            file_png = png_stub.split('v')[-2][:-12] + '-o%05d' % orbit + png_stub.split('v')[-2][-12:] + 'v' + png_stub.split('v')[-1]
+            file_png = '_'.join(png_stub.split('_')[:-2]) + '-o%05d_' % orbit + '_'.join(png_stub.split('_')[-2:])
             orbit_ind = np.squeeze(np.where(orbits == orbit))
             ds = np.array([i.total_seconds() for i in dn-dn[orbit_ind][0]])
             orbit_ind = np.squeeze(np.where(abs(ds) < 2000.))
