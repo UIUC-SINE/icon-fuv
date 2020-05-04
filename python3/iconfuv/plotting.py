@@ -30,7 +30,7 @@ def tohban(l2=None, l1=None, anc=None, epoch=None, stripe=None):
     dn2_hour = dn2.astype(np.int)
     dn2_min = ((dn2-dn2_hour)*60).astype(np.int)
 
-    mode = anc.variables['ICON_ANCILLARY_FUV_ACTIVITY'][:]
+    mode = l1.variables['ICON_L1_FUV_Mode'][:]
 
     orbits = l2.variables['ICON_L25_Orbit_Number'][:]
     orbit = orbits[epoch]
@@ -52,7 +52,7 @@ def tohban(l2=None, l1=None, anc=None, epoch=None, stripe=None):
         orbit_ind = np.squeeze(np.where(abs(ds) < 2000.))
         print('new orbit indices:[{},{}]'.format(orbit_ind[0], orbit_ind[-1]))
 
-    idx = np.where(mode==258)[0][orbit_ind]
+    idx = np.where(mode==2)[0][orbit_ind]
 
     X = np.transpose([dn,]*l2.dimensions['Altitude'].size)[orbit_ind]
     Y = l2.variables['ICON_L25_O_Plus_Profile_Altitude'][orbit_ind,:,stripe]
@@ -180,7 +180,7 @@ def tohban2(file_l2=None, png_stub=None, file_l1=None, file_anc=None, stripe=Non
     dn2_hour = dn2.astype(np.int)
     dn2_min = ((dn2-dn2_hour)*60).astype(np.int)
 
-    mode = anc.variables['ICON_ANCILLARY_FUV_ACTIVITY'][:]
+    mode = l1.variables['ICON_L1_FUV_Mode'][:]
 
     orbits = l2.variables['ICON_L25_Orbit_Number'][:]
     Op_lat = l2.variables['ICON_L25_Latitude'][:, stripe] # NmF2 latitudes
@@ -208,7 +208,7 @@ def tohban2(file_l2=None, png_stub=None, file_l1=None, file_anc=None, stripe=Non
                 t0 = parser.parse(l2.variables['ICON_L25_UTC_Time'][orbit_ind])
                 t1 = t0
 
-            idx = np.where(mode==258)[0][orbit_ind]
+            idx = np.where(mode==2)[0][orbit_ind]
 
             X = np.transpose([dn,]*l2.dimensions['Altitude'].size)[orbit_ind]
             Y = l2.variables['ICON_L25_O_Plus_Profile_Altitude'][orbit_ind,:,stripe]
@@ -335,7 +335,7 @@ def tohban2(file_l2=None, png_stub=None, file_l1=None, file_anc=None, stripe=Non
             axes[0].set_xticklabels(labels_x2)
             axes[1].set_xticklabels(labels_x2)
             axes[2].set_xticklabels(labels_x2)
-            axes[3].set_xticklabels(labels_x2)
+            # axes[3].set_xticklabels(labels_x2)
 
             fig.savefig(file_png, bbox_inches='tight')
             plt.close(fig)
@@ -347,8 +347,12 @@ def tohban2(file_l2=None, png_stub=None, file_l1=None, file_anc=None, stripe=Non
     l2.close()
     anc.close()
 
-def tohban_l1(file_l1=None, png_dir=None):
-    l1 = netCDF4.Dataset(file_l1, mode='r')
+def tohban_l1(file_l1_raw=None, file_l1_ar=None, png_dir=None, stripes=None, both=True):
+    if stripes is None:
+        stripes = [0,1,2,3,4,5]
+    if file_l1_ar is not None:
+        l1_ar = netCDF4.Dataset(file_l1_ar, mode='r')
+    l1 = netCDF4.Dataset(file_l1_raw, mode='r')
     mirror_dir = ['M9','M6','M3','P0','P3','P6']
     mode = l1.variables['ICON_L1_FUV_Mode'][:]
     dn = parser.parse(l1.variables['ICON_L1_FUVA_SWP_Center_Times'][10])
@@ -365,10 +369,21 @@ def tohban_l1(file_l1=None, png_dir=None):
         for i in range(6):
             br[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[i]][idxs[night_ind],-alt_size:].filled(fill_value=0)
             br_err[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[i]][idxs[night_ind],-alt_size:].filled(fill_value=0)
-        br_corrected, br_err_modified = l1_correction_orbit(br.copy(), br_err.copy())
-        for stripe in range(6):
+        if both is True:
+            if file_l1_ar is not None:
+                br_corrected = np.zeros((6, len(night_ind), alt_size))
+                br_err_modified = np.zeros((6, len(night_ind), alt_size))
+                for i in range(6):
+                    br_corrected[i] = l1_ar.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[i]][idxs[night_ind],-alt_size:].filled(fill_value=0)
+                    br_err_modified[i] = l1_ar.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[i]][idxs[night_ind],-alt_size:].filled(fill_value=0)
+            else:
+                br_corrected, br_err_modified = l1_correction_orbit(br.copy(), br_err.copy())
+        for stripe in stripes:
             file_png = png_dir + 'stripe_{}_orbit_{}.png'.format(stripe, night)
-            fig, ax = plt.subplots(nrows=4, figsize=(6.4,8.4))
+            if both is True:
+                fig, ax = plt.subplots(nrows=4, figsize=(6.4,8.4))
+            else:
+                fig, ax = plt.subplots(nrows=2, figsize=(6.4,8.4))
             im0=ax[0].imshow(np.flipud(br[stripe].swapaxes(0,1)), aspect='auto')
             divider = make_axes_locatable(ax[0])
             cax = divider.append_axes('right', size='5%', pad=0.05)
@@ -379,16 +394,17 @@ def tohban_l1(file_l1=None, png_dir=None):
             cax = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(im1, cax=cax, orientation='vertical')
             ax[1].set_title('Uncertainty')
-            im2=ax[2].imshow(np.flipud(br_corrected[stripe].swapaxes(0,1)), aspect='auto')
-            divider = make_axes_locatable(ax[2])
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(im2, cax=cax, orientation='vertical')
-            ax[2].set_title('Brightness - Artifact Removed')
-            im3=ax[3].imshow(np.flipud(br_err_modified[stripe].swapaxes(0,1)), aspect='auto')
-            divider = make_axes_locatable(ax[3])
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(im3, cax=cax, orientation='vertical')
-            ax[3].set_title('Uncertainty - Artifact Removed')
+            if both is True:
+                im2=ax[2].imshow(np.flipud(br_corrected[stripe].swapaxes(0,1)), aspect='auto')
+                divider = make_axes_locatable(ax[2])
+                cax = divider.append_axes('right', size='5%', pad=0.05)
+                fig.colorbar(im2, cax=cax, orientation='vertical')
+                ax[2].set_title('Brightness - Artifact Removed')
+                im3=ax[3].imshow(np.flipud(br_err_modified[stripe].swapaxes(0,1)), aspect='auto')
+                divider = make_axes_locatable(ax[3])
+                cax = divider.append_axes('right', size='5%', pad=0.05)
+                fig.colorbar(im3, cax=cax, orientation='vertical')
+                ax[3].set_title('Uncertainty - Artifact Removed')
             plt.tight_layout()
             fig.savefig(file_png, bbox_inches='tight')
             plt.close(fig)
@@ -403,11 +419,11 @@ def l1_plotter(date='2019-12-24', num=10):
     l1 = netCDF4.Dataset(file_l1, mode='r')
 
     # Get variables from netCDF file
-    mode = anc.variables['ICON_ANCILLARY_FUV_ACTIVITY'][:]
-    total_num = sum(mode==258)
+    mode = l1.variables['ICON_L1_FUV_Mode'][:]
+    total_num = sum(mode==2)
     epoch = np.random.randint(total_num, size=num)
     stripe = np.random.randint(6, size=num)
-    idx = np.where(mode==258)[0][epoch]
+    idx = np.where(mode==2)[0][epoch]
 
     br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[stripe]][idx,:]
     br_er = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[stripe]][idx,:]
