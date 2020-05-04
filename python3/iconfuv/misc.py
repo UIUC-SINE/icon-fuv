@@ -7,6 +7,14 @@ from skimage.transform import radon
 import netCDF4
 from itertools import product
 
+def loncorrect(lon):
+    if lon.size==1:
+        if lon > 180:
+            lon -= 360
+    else:
+        lon[lon>180] -= 360
+    return lon
+
 def size_equalizer(x, ref_size, mode='center', val=0):
     """
     Crop or zero-pad a 2D array so that it has the size `ref_size`.
@@ -118,21 +126,23 @@ def sliding_min(x, winsize=5, mode='reflect'):
     elif len(x.shape) == 2:
         out = np.zeros_like(x)
         for i in range(x.shape[0]):
-            out[i] = sliding_min(x[i])
+            out[i] = sliding_min(x[i], winsize=winsize)
         return out
 
 
-def get_br(date='2020-01-03', epoch=300, stripe=None, v=2, r=0):
-    file_l1='/home/kamo/resources/iconfuv/nc_files/ICON_L1_FUV_SWP_{}_v{:02d}r{:03d}.NC'.format(date,v,r)
-    file_anc='/home/kamo/resources/iconfuv/nc_files/ICON_L0P_FUV_Ancillary_{}_v01r000.NC'.format(date)
+def get_br(date='2020-01-03', epoch=300, stripe=None, v=3, r=0, size='full', swapaxes=False):
+    i0 = 256 if size=='full' else 156
+    path_dir = '/home/kamo/resources/iconfuv/nc_files/'
+    file_l1 = path_dir + 'l1/ICON_L1_FUV_SWP_{}_v{:02d}r{:03d}.NC'.format(date,v,r)
+    file_anc = path_dir + 'l0/ICON_L0P_FUV_Ancillary_{}_v01r000.NC'.format(date)
     l1 = netCDF4.Dataset(file_l1, mode='r')
     anc = netCDF4.Dataset(file_anc, mode='r')
     mirror_dir = ['M9','M6','M3','P0','P3','P6']
-    mode = anc.variables['ICON_ANCILLARY_FUV_ACTIVITY'][:]
-    mode_night = (mode == 258).astype(np.int)
+    mode = l1.variables['ICON_L1_FUV_Mode'][:]
+    mode_night = (mode == 2).astype(np.int)
     nights = np.diff(mode_night, prepend=0)
     nights[nights==-1] = 0
-    idxs = np.where(mode==258)[0][:]
+    idxs = np.where(mode==2)[0][:]
     nights = np.cumsum(nights)[idxs]
     orbits = anc.variables['ICON_ANCILLARY_FUV_ORBIT_NUMBER'][idxs]
     orbit = orbits[epoch]
@@ -142,21 +152,22 @@ def get_br(date='2020-01-03', epoch=300, stripe=None, v=2, r=0):
     print('Epoch:{}\nOrbit:{}\nOrbit Inds:[{}-{}]'.format(epoch, orbit, orbit_ind[0], orbit_ind[-1]))
     print('Epoch:{}\nNight:{}\nNight Inds:[{}-{}]'.format(epoch, night, night_ind[0], night_ind[-1]))
     if stripe is not None:
-        br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[stripe]][idxs[night_ind],100:]
-        br_err = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[stripe]][idxs[night_ind],100:].filled(fill_value=0)
+        br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[stripe]][idxs[night_ind],256-i0:]
+        br_err = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[stripe]][idxs[night_ind],256-i0:].filled(fill_value=0)
         br.fill_value = br.min()
         br = br.filled()
-        # try:
-        #     br = np.array(br[br.mask==False].reshape((br.shape[0], -1)))
-        # except:
-        #     br = np.array()
-        # l1.close()
+        if swapaxes is True:
+            br = br.swapaxes(0,1)
+            br_err = br_err.swapaxes(0,1)
         return br, br_err
-    br = np.zeros((6, len(night_ind), 156))
-    br_err = np.zeros((6, len(night_ind), 156))
+    br = np.zeros((6, len(night_ind), i0))
+    br_err = np.zeros((6, len(night_ind), i0))
     for i in range(6):
-        br[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[i]][idxs[night_ind],100:].filled(fill_value=0)
-        br_err[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[i]][idxs[night_ind],100:].filled(fill_value=0)
+        br[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[i]][idxs[night_ind],256-i0:].filled(fill_value=0)
+        br_err[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[i]][idxs[night_ind],256-i0:].filled(fill_value=0)
+    if swapaxes is True:
+        br = br.swapaxes(1,2)
+        br_err = br_err.swapaxes(1,2)
     l1.close()
     return br, br_err
 
