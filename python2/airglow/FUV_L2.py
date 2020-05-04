@@ -316,7 +316,9 @@ def Tikhonov(A, Bright, reg_deg, reg_param=0., Sig_Bright=None, weight_resid=Fal
         seminorm[i] = np.linalg.norm(L.dot(sol))
 
     # Find the optimal regularization parameter using the maximum second derivative method
-    reg_corner = Maximum_Curvature_gradiens(residual,seminorm,reg_param)
+    reg_corner = Maximum_Curvature_gradiens(residual,seminorm,reg_param,method='derivative')
+    # FIXME
+    # reg_corner = 2500.
 
     # Calculate the solution with the optimal parameter (and, if desired, also the uncertainty)
     if Sig_Bright is None:
@@ -330,14 +332,14 @@ def Tikhonov(A, Bright, reg_deg, reg_param=0., Sig_Bright=None, weight_resid=Fal
 
 
 # Calculate regularized inverse rolution
-def calc_solution(A,Bright,alpha,L,Sig_Bright=None):
+def calc_solution(A,Bright,lam,L,Sig_Bright=None):
     '''
     Calculates the solution using non-negative least square for the regularization problem.
     Optionally propagates uncertainty from input brightness to output VER.
     INPUTS:
         A          - Distance matrix
         Bright     - Brightness Profile (Rayleigh)
-        lamda      - The selected regularization parameter
+        lam        - The selected regularization parameter
         L          - Roughening matrix
     OPTIONAL INPUTS:
         Sig_Bright   - Covariance matrix of Bright. If not None, the uncertainty propagation calculation will be performed, and
@@ -352,7 +354,8 @@ def calc_solution(A,Bright,alpha,L,Sig_Bright=None):
         20-Apr-2016: Uncertainty propagation added by Brian Harding (bhardin2@illinois.edu)
     CALLS:
     '''
-
+    # alpha = np.sqrt(lam)
+    alpha = lam
     # Create the augmented matrix C
     C = np.concatenate((A, alpha*L))
 
@@ -402,8 +405,8 @@ def Maximum_Curvature_gradiens(residual,x_lamda,reg_param,method='derivative'):
     '''
 
     #transform rho and eta into log-log space
-    Xvec=np.log(residual);
-    Yvec=np.log(x_lamda);
+    Xvec=np.log(residual)
+    Yvec=np.log(x_lamda)
 
     if method == 'derivative': # Compute second derivative at each point
         grad1 =  np.gradient(Yvec)/np.gradient(Xvec)
@@ -897,17 +900,10 @@ def FUV_Level_2_Density_Calculation(Bright,alt_vector,satlatlonalt,az,ze, Sig_Br
         ret_cov = False
         Sig_Bright = np.eye(len(Bright)) # dummy variable
 
-    # Truncate the tangent altitude vector to include only limb measurements
-    h = alt_vector[np.where(alt_vector>limb)]
     # Shift the altitude vector half shell above so that the altitudes are centered in the shells
     # The last shell altitude is shifted for the same amount as the previous shell
-    h_centered = h + ( np.roll(h,1) - h )/2
-    h_centered[0] = h[0] + ( h_centered[1] - h[1] )
-
-    Bright= Bright[0:len(h)]
-    Sig_Bright = Sig_Bright[:len(h),:len(h)]
-    ze = ze[:len(h)]
-    az = az[:len(h)]
+    h_centered = alt_vector + ( np.roll(alt_vector,1) - alt_vector )/2
+    h_centered[0] = alt_vector[0] + ( h_centered[1] - alt_vector[1] )
 
     # Check of we are estimating the distance matrix for a spherical or ellipsoid earth
     # Spherical earth calculations need ~0.26 secs
@@ -1553,7 +1549,7 @@ def sliding_min(x, winsize=5, mode='reflect'):
     elif len(x.shape) == 2:
         out = np.zeros_like(x)
         for i in range(x.shape[0]):
-            out[i] = sliding_min(x[i])
+            out[i] = sliding_min(x[i], winsize=winsize)
         return out
 
 def medfilt3d(br, br_err, threshold=50, win_size=(5,10,10)):
@@ -1688,7 +1684,6 @@ def Get_lvl2_5_product(file_input = None,
                        file_output = None,
                        file_GPI = None,
                        Spherical = True,
-                       stripenum = None,
                        regu_order = 2):
     '''
     Operational Code that reads Lvl1 file and creates the corresponding Lvl2.5
@@ -1755,16 +1750,11 @@ def Get_lvl2_5_product(file_input = None,
             f107p = None
 
         # The tangent point WGS-84 coordinates at the center of the integration time
-        # FUV_TANGENT_LATITUDES = ancillary.variables['ICON_ANCILLARY_FUV_TANGENTPOINTS_LATLONALT'][:,:,:,0]
-        # FUV_TANGENT_LONGITUDES = ancillary.variables['ICON_ANCILLARY_FUV_TANGENTPOINTS_LATLONALT'][:,:,:,1]
-        # FUV_TANGENT_ALTITUDES = ancillary.variables['ICON_ANCILLARY_FUV_TANGENTPOINTS_LATLONALT'][:,:,:,2]
         FUV_TANGENT_LATITUDES = ancillary.variables['ICON_ANCILLARY_FUVA_TANGENTPOINTS_LATLONALT'][:,:,:,0]
         FUV_TANGENT_LONGITUDES = ancillary.variables['ICON_ANCILLARY_FUVA_TANGENTPOINTS_LATLONALT'][:,:,:,1]
         FUV_TANGENT_ALTITUDES = ancillary.variables['ICON_ANCILLARY_FUVA_TANGENTPOINTS_LATLONALT'][:,:,:,2]
 
         # The az/el of the look vector
-        # FUV_AZ = ancillary.variables['ICON_ANCILLARY_FUV_FOV_AZIMUTH_ANGLE'][:,:,:]
-        # FUV_ZE = ancillary.variables['ICON_ANCILLARY_FUV_FOV_ZENITH_ANGLE'][:,:,:]
         FUV_AZ = ancillary.variables['ICON_ANCILLARY_FUVA_FOV_AZIMUTH_ANGLE'][:,:,:]
         FUV_ZE = ancillary.variables['ICON_ANCILLARY_FUVA_FOV_ZENITH_ANGLE'][:,:,:]
 
@@ -1774,7 +1764,6 @@ def Get_lvl2_5_product(file_input = None,
         ICON_WGS84_ALTITUDE = ancillary.variables['ICON_ANCILLARY_FUV_ALTITUDE'][:]
 
         # Read the solar local times from ancillary file
-        # local_time = ancillary.variables['ICON_ANCILLARY_FUV_TANGENTPOINTS_LST']
         local_time = ancillary.variables['ICON_ANCILLARY_FUVA_TANGENTPOINTS_LST']
 
         # Read the orbit number
@@ -1847,9 +1836,6 @@ def Get_lvl2_5_product(file_input = None,
 
     # Work on each individual stripe
     for stripe, d in enumerate(mirror_dir):
-        if stripenum is not None:
-            if stripe != stripenum:
-                continue
         night_ind = []
         for ind, (mode, l1_qual) in enumerate(zip(FUV_mode, l1_quality)):
             # Check if we are in night mode
@@ -2186,7 +2172,7 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None,  inv_error=0
             if np.mean(bright) < 10:
                 binary_code[2] = 1
         # Digit 3: Low input signal level
-            elif np.mean(bright) < 15:
+            elif (np.mean(bright) < 15) or (np.max(bright) < 100):
                 binary_code[3] = 1
         # Digit 4: Unexpected hmF2 value
         if Ne is not None:
@@ -2405,6 +2391,7 @@ def CreateSummaryPlot(file_netcdf, png_stub, stripe=2, min_alt=None, max_alt=Non
 
                 # Generate the filename with the orbit number in it
                 fig.savefig(file_png, bbox_extra_artists=(lgd,an), bbox_inches='tight')
+                plt.close(fig)
                 # fig.savefig(file_png)
             except:
                 pass
