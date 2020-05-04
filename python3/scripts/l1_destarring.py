@@ -7,12 +7,16 @@
 import sys, netCDF4
 import numpy as np
 from shutil import copyfile
+import glob
 from iconfuv.destarring.star_remover import star_removal
 
 path_dir = '/home/kamo/resources/iconfuv/nc_files/'
 
 def destarrer(date):
-    file_input = path_dir + 'ICON_L1_FUV_SWP_{}_v03r000.NC'.format(date)
+    file_input = path_dir + 'l1/ICON_L1_FUV_SWP_{}_v03r*'.format(date)
+    file_input = glob.glob(file_input)
+    file_input.sort()
+    file_input = file_input[-1]
 
     file_input_c = file_input.split('_v')[0] + '_v77r000.NC'
     copyfile(file_input, file_input_c)

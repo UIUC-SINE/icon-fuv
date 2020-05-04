@@ -5,23 +5,17 @@ from datetime import datetime, timedelta
 from dateutil import parser
 import netCDF4
 from iconfuv.plotting import tohban
+from iconfuv.misc import loncorrect
 
-def loncorrect(lon):
-    if lon.size==1:
-        if lon > 180:
-            lon -= 360
-    else:
-        lon[lon>180] -= 360
-    return lon
 
 path_dir = '/home/kamo/resources/iconfuv/nc_files/'
 
-orbit=4
+orbit=10
 # %% files ----------------------------------
 date = '2020-01-11'
-file_anc = path_dir + 'ICON_L0P_FUV_Ancillary_{}_v01r000.NC'.format(date)
-file_l1 = path_dir + 'ICON_L1_FUV_SWP_{}_v77r000.NC'.format(date)
-file_l2 = path_dir + 'ICON_L2-5_FUV_Night_orbit_{}_v01r000.NC'.format(date)
+file_anc = path_dir + 'l0/ICON_L0P_FUV_Ancillary_{}_v01r000.NC'.format(date)
+file_l1 = path_dir + 'l1/ICON_L1_FUV_SWP_{}_v77r000.NC'.format(date)
+file_l2 = path_dir + 'l2/ICON_L2-5_FUV_Night_orbit_{}_v01r000.NC'.format(date)
 # file_l1 = path_dir + 'ICON_L1_FUV_SWP_{}_v77r000.NC'.format(date)
 # file_l2 = path_dir + 'ICON_L2-5_FUV_Night_{}_v01r000.NC'.format(date)
 # file_l1='/home/kamo/icon/nc_files/ICON_L1_FUV_SWP_{}_v99r000.NC'.format(date)
@@ -34,8 +28,8 @@ l2 = netCDF4.Dataset(file_l2, mode='r')
 mirror_dir = ['M9','M6','M3','P0','P3','P6']
 
 # %% params ---------------------------------
-stripe=3
-epoch_r=0
+stripe=1
+epoch_r=10
 
 mode = l1.variables['ICON_L1_FUV_Mode'][:]
 mode_night = (mode == 2).astype(np.int)
