@@ -1,11 +1,19 @@
-import os
+import os, glob, netCDF4
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage.draw import line_aa
 from scipy.signal import correlate, convolve2d
 from skimage.transform import radon
-import netCDF4
 from itertools import product
+
+def lastfile(x):
+    """
+    Sort all the files complying with `x` alphabetically and return the last.
+    """
+    y = glob.glob(x)
+    y.sort()
+    assert len(y) > 0, 'No file found with the given name'
+    return y[-1]
 
 def loncorrect(lon):
     if lon.size==1:
