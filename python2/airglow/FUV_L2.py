@@ -1421,13 +1421,13 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
 "et al. [2018, doi: 10.1007/s11214-018-0502-9].")
 
     # Solar Local Time
-    var = _create_variable(ncfile, 'ICON_L25_Solar_Local_Time', L25_dict['FUV_local_time'],
+    var = _create_variable(ncfile, 'ICON_L25_Local_Solar_Time', L25_dict['FUV_local_time'],
                           dimensions=('Epoch','Stripe'),
                           format_nc='f4', format_fortran='F', desc='Solar local times at the retrieved peak O+ density locations',
-                          display_type='Time_Series', field_name='Solar_Local_Time', fill_value=-999, label_axis='Time', bin_location=0.5,
+                          display_type='Time_Series', field_name='Local_Solar_Time', fill_value=-999, label_axis='Time', bin_location=0.5,
                           units='hours', valid_min=np.float32(0.), valid_max=np.float32(24.0), var_type='data', chunk_sizes=[1,1],
                           depend_0 = 'Epoch',depend_1='Stripe',
-                          notes="Solar local times (0-24 hours decimal) at the locations of the retrieved peak O+ densities.")
+                          notes="Local solar times (0-24 hours decimal) at the locations of the retrieved peak O+ densities.")
 
     # FUV inversion quality flag
     var = _create_variable(ncfile, 'ICON_L25_Quality', L25_dict['FUV_Quality'],
@@ -2358,8 +2358,11 @@ def CreateSummaryPlot(file_netcdf, png_stub, stripe=2, min_alt=None, max_alt=Non
                     tick_ind = np.argmin(abs(minlist - (hh*60+mm)))
                     lon0 = Op_lon[orbit_ind[tick_ind]]
                     lat0 = Op_lat[orbit_ind[tick_ind]]
-                    locstr = u'{:02d}:{:02d}'.format(dn2_hour[orbit_ind[tick_ind]], dn2_min[orbit_ind[tick_ind]])
-                    labels_x2.append('{}\n{:.0f}\n{:.0f}'.format(locstr, lon0, lat0))
+                    if Op_lon.mask[orbit_ind[tick_ind]]==False:
+                        locstr = u'{:02d}:{:02d}'.format(dn2_hour[orbit_ind[tick_ind]], dn2_min[orbit_ind[tick_ind]])
+                        labels_x2.append('{}\n{:.0f}\n{:.0f}'.format(locstr, lon0, lat0))
+                    else:
+                        labels_x2.append('')
 
                 axes[4].set_xticklabels(labels_x2)
 
