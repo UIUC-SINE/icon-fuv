@@ -39,23 +39,29 @@ def star_masker_orbit(br, patch_size=64, stride=32, nn_model=unet_v1, modelpath=
     return mask
 
 def ft(br):
-    rows, cols = br.shape
-    winsize = 81
-    brf = np.fft.fftn(br)
-    brfs = np.fft.fftshift(brf)
-    win = size_equalizer(
-        np.outer(np.hamming(winsize), np.hamming(winsize)),
-        [rows,cols]
-    )
-    win2 = size_equalizer(
-        np.outer(np.hamming(10), np.ones(cols)),
-        [rows,cols]
-    )
-    brfsw = brfs - brfs * win
-    brfsw -= brfsw * win2
-    br2 = np.real(np.fft.ifft2(np.fft.ifftshift(brfsw)))
-    br2 = br2 * (br2>0)
-    return br2
+    if len(br.shape)==2:
+        rows, cols = br.shape
+        winsize = 81
+        brf = np.fft.fftn(br)
+        brfs = np.fft.fftshift(brf)
+        win = size_equalizer(
+            np.outer(np.hamming(winsize), np.hamming(winsize)),
+            [rows,cols]
+        )
+        win2 = size_equalizer(
+            np.outer(np.hamming(10), np.ones(cols)),
+            [rows,cols]
+        )
+        brfsw = brfs - brfs * win
+        brfsw -= brfsw * win2
+        br2 = np.real(np.fft.ifft2(np.fft.ifftshift(brfsw)))
+        br2 = br2 * (br2>0)
+        return br2
+    if len(br.shape)==3:
+        brout = np.zeros_like(br)
+        for i in range(br.shape[0]):
+            brout[i] = ft(br[i])
+        return brout
 
 def ncc(br, feature=None):
     if feature is None:
