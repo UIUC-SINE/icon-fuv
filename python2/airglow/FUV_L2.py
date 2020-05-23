@@ -1135,9 +1135,9 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
 "any daytime measurements nor output them in this data product. The O+ density profiles are estimated from the measured brightness "
 "profiles of 135.6 nm emissions by solving a regularized linear inverse problem. Due to multiple scattering (yields non-linearity) "
 "and low brightness (yields low SNR), we do not use the brightness measurements having tangent altitudes below 150 km, consequently "
-"we do not estimate the O+ density profile at altitudes below 150 km. The Altitude dimension is the maximum number of tangent "
+"we do not estimate the O+ density profile at tangent altitudes below 150 km (i.e. on the disk). The Altitude dimension is the maximum number of tangent "
 "points that are above 150 km for the entire 24-hour period. The Stripe dimension represents the dimension from left to right along "
-"the horizon. Nominally 6 stripes are used, and each stripe samples a 3-degree wide field of view. O+ density profiles are "
+"the horizon for any one given image. Nominally 6 stripes are used, and each stripe samples a 3-degree wide field of view. O+ density profiles are "
 "estimated separately for each stripe."])
     ncfile.Time_Resolution =                '12 seconds'
     ncfile.Title =                          'ICON FUV O+ Altitude Profiles (DP 2.5)'
@@ -1172,10 +1172,10 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
                           dimensions=('Epoch'),
                           format_nc=str, format_fortran='A23', desc='Center time of 12-second profile integration',
                           display_type='Time_Series', field_name='Center time', fill_value=None, label_axis='Time', bin_location=0.5,
-                          units=' ', valid_min='1970-01-01/00:00:00', valid_max='2100-12-31/23:59:59', var_type='support_data', chunk_sizes=[1],
+                          units=' ', valid_min='1970-01-01 00:00:00', valid_max='2100-12-31 23:59:59', var_type='support_data', chunk_sizes=[1],
                           depend_0 = 'Epoch',
                           notes="The center times of the exposures. Different than Epoch, array elements are not in milliseconds, "
-"but they are strings of the date in UT, with the format YYYY-MM-DD/HH:MM:SS.")
+"but they are strings of the date in UT, with the format YYYY-MM-DD HH:MM:SS.FFFZ")
 
     var = _create_variable(ncfile, 'ICON_L25_Start_Times', L25_dict['FUV_START_TIMES'],
                           dimensions=('Epoch'),
@@ -1348,7 +1348,7 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
 
     var = _create_variable(ncfile, 'ICON_L25_Latitude', L25_dict['FUV_latmF2'],
                           dimensions=('Epoch','Stripe'),
-                          format_nc='f4', format_fortran='F', desc='Estimated latitudes of the peak O+ densities',
+                          format_nc='f4', format_fortran='F', desc='Estimated latitudes of the peak O+ densities in WGS84',
                           display_type='Time_Series', field_name='NmF2 latitude', fill_value=-999, label_axis='Time', bin_location=0.5,
                           units='degrees North', valid_min=np.float32(-90.), valid_max=np.float32(90.), var_type='data', chunk_sizes=[1,1],
                           depend_0 = 'Epoch',depend_1='Stripe',
@@ -1357,7 +1357,7 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
 
     var = _create_variable(ncfile, 'ICON_L25_Longitude', L25_dict['FUV_lonmF2'],
                           dimensions=('Epoch','Stripe'),
-                          format_nc='f4', format_fortran='F', desc='Estimated longitudes of the peak O+ densities',
+                          format_nc='f4', format_fortran='F', desc='Estimated longitudes of the peak O+ densities in WGS84',
                           display_type='Time_Series', field_name='NmF2 longitude', fill_value=-999, label_axis='Time', bin_location=0.5,
                           units='degrees East', valid_min=np.float32(0.), valid_max=np.float32(360.), var_type='data', chunk_sizes=[1,1],
                           depend_0 = 'Epoch',depend_1='Stripe',
@@ -1423,7 +1423,7 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
     # Solar Local Time
     var = _create_variable(ncfile, 'ICON_L25_Local_Solar_Time', L25_dict['FUV_local_time'],
                           dimensions=('Epoch','Stripe'),
-                          format_nc='f4', format_fortran='F', desc='Solar local times at the retrieved peak O+ density locations',
+                          format_nc='f4', format_fortran='F', desc='Local solar times at the retrieved peak O+ density locations',
                           display_type='Time_Series', field_name='Local_Solar_Time', fill_value=-999, label_axis='Time', bin_location=0.5,
                           units='hours', valid_min=np.float32(0.), valid_max=np.float32(24.0), var_type='data', chunk_sizes=[1,1],
                           depend_0 = 'Epoch',depend_1='Stripe',
@@ -1449,10 +1449,10 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
                           display_type='Time_Series', field_name='Quality Flags', fill_value=-999, label_axis='Time', bin_location=0.5,
                           units=' ', valid_min=0, valid_max=31, var_type='data', chunk_sizes=[1,ncfile.dimensions['Stripe'].size],
                           depend_0 = 'Epoch',depend_1='Stripe',
-                          notes="This variable is intended to provide description to the user why `ICON_L25_Quality` is "
+                          notes="This variable is intended to provide a description to the user why `ICON_L25_Quality` is "
 "less than 1, if that is the case. This is a binary coded integer whose binary representation indicates the quality conditions which were "
 "present during or before the inversion. Here are the quality conditions represented by each digit: \n"
-"1: Error occured during inversion. Makes the quality 0, no retrieval available. \n"
+"1: Error occurred during inversion. Makes the quality 0, no retrieval available. \n"
 "2: No reliable quality L1 data available (see L1 quality flag). Makes the quality 0, no retrieval produced. \n"
 "4: Very low input signal level (very low brightness). Makes the quality 0, retrieval available. \n"
 "8: Low input signal level (low brightness). Makes the quality 0.5, retrieval available. \n"
@@ -1774,7 +1774,7 @@ def Get_lvl2_5_product(file_input = None,
         FUV_1356_IMAGE, FUV_1356_ERROR = l1_preprocessing(data)
 
         # Get observation times from file and store in a datetime variable
-        temp = data.variables['ICON_L1_FUVA_SWP_Center_Times']
+        temp = ancillary.variables['ICON_ANCILLARY_FUV_TIME_UTC']
         FUV_dn = []
         for d in temp:
             FUV_dn.append(parser.parse(d))
@@ -1960,7 +1960,7 @@ def Get_lvl2_5_product(file_input = None,
     # Inversion is complete. Form the output dictionary
     L25_dict = {
         'FUV_EPOCH': FUV_EPOCH[night_ind],
-        'FUV_CENTER_TIMES': data.variables['ICON_L1_FUVA_SWP_Center_Times'][:][night_ind],
+        'FUV_CENTER_TIMES': ancillary.variables['ICON_ANCILLARY_FUV_TIME_UTC'][:][night_ind],
         'FUV_START_TIMES': data.variables['ICON_L1_FUVA_SWP_Start_Times'][:][night_ind],
         'FUV_STOP_TIMES': data.variables['ICON_L1_FUVA_SWP_Stop_Times'][:][night_ind],
         'FUV_dn': FUV_dn[night_ind],
