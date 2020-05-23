@@ -7,18 +7,20 @@ from dateutil import parser
 from datetime import timedelta
 from scipy.signal import medfilt
 
-date = '2020-01-04'
+date = '2020-01-20'
 data = True # True: use data, False: use simulation for brightness
 test = False # if True, artificially creates a hot pixel with high uncertainty
 median = False
-epoch = 210
-stripe = 4
+epoch = 58
+stripe = 3
 limb = 150.
 contribution ='RRMN'
 reg_method = 'Tikhonov'
 weight_resid = False
 Spherical = True
 regu_order = 2
+
+path_dir = '/home/kamo/resources/iconfuv/nc_files/'
 
 file_l1='../../nc_files/ICON_L1_FUV_SWP_{}_v02r000.NC'.format(date)
 # file_l2='nc_files/ICON_L3_FUV_Oxygen-Profile-Night_{}_v01r000.NC'.format(date)

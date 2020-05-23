@@ -3,8 +3,24 @@ from airglow.FUV_L2 import *
 import netCDF4, pyglow
 from dateutil import parser
 from datetime import timedelta
+import airglow.ICON_FUV_fwd_model as FUV_F # for simulating data
 
 path_dir = '/home/kamo/resources/iconfuv/nc_files/'
+
+def calc_solution_gd(A,b,nu,numiter,h,plot=False):
+    ver = np.zeros_like(b)
+    Ata = A.T.dot(A)
+    Atb = A.T.dot(b)
+    vers = []
+    for i in range(numiter):
+        ver = ver - nu * (Ata.dot(ver) - Atb)
+        ver[ver<0] = 1e-5
+        vers.append(ver)
+        if plot:
+            plt.plot(ver, h)
+            plt.pause(0.1)
+            plt.clf()
+    return vers
 
 def custom_destarring_orbit(l1, epoch, stripe):
     mirror_dir = ['M9','M6','M3','P0','P3','P6']
@@ -32,7 +48,7 @@ def custom_destarring_orbit(l1, epoch, stripe):
 
 def custom_l25(date='2020-01-02', epoch=100, stripe=3, limb=150.,
     contribution='RRMN', l1_rev='v03r000', anc_rev='v01r000', method='derivative',
-    weight_resid=False, reg_order=2, reg_param=0, br_custom=False):
+    weight_resid=False, reg_order=2, reg_param=0, br_fact=None, iri_comp=False):
 
     file_l1 = path_dir + 'l1/ICON_L1_FUV_SWP_{}_{}.NC'.format(date, l1_rev)
     file_anc = path_dir + 'l0/ICON_L0P_FUV_Ancillary_{}_{}.NC'.format(date, anc_rev)
@@ -46,6 +62,7 @@ def custom_l25(date='2020-01-02', epoch=100, stripe=3, limb=150.,
 
     mode = l1.variables['ICON_L1_FUV_Mode'][:]
     idx = np.where(mode==2)[0][epoch]
+    idx=0
     dn = parser.parse(anc.variables['ICON_ANCILLARY_FUV_TIME_UTC'][idx])
 
     # Read the geophysical indeces
@@ -78,6 +95,8 @@ def custom_l25(date='2020-01-02', epoch=100, stripe=3, limb=150.,
     limb_i = np.where(np.squeeze(tanalts)>=limb)[0]
     br, err = custom_destarring_orbit(l1, epoch, stripe)
     br = br[limb_i]
+    if br_fact is not None:
+        br /= br_fact
     unmasked_ind = nan_checker(br)
     limb_i0 = limb_i[unmasked_ind]
     br_orig = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[stripe]][idx,limb_i0]
@@ -101,6 +120,20 @@ def custom_l25(date='2020-01-02', epoch=100, stripe=3, limb=150.,
     tanlats = tanlats[limb_i0]
     tanlons = tanlons[::-1]
     tanlats = tanlats[::-1]
+    if iri_comp:
+        br, phot_nn = FUV_F.get_Photons_from_Brightness_Profile_1356_nighttime(
+            ze,az,satlatlonalt[0],satlatlonalt[1],satlatlonalt[2],dn,
+            cont=1,
+            symmetry=0, # 0 = spherical symmetry
+            shperical=0, # 0 = spherical earth
+            step = 100., # step size for line-of-sight integral. Larger --> runs faster
+            f107=my_f107,
+            f107a=my_f107a,
+            f107p=my_f107p,
+            apmsis=my_apmsis,
+            stripes_used=1
+        )
+        err = np.sqrt(br) + 1e-1
 
     anc.close()
     l1.close()
@@ -141,7 +174,9 @@ def custom_l25(date='2020-01-02', epoch=100, stripe=3, limb=150.,
         r = A.dot(sols[i]) - Bright
         residual[i] = np.linalg.norm(r)
         seminorm[i] = np.linalg.norm(L.dot(sols[i]))
-        nes[i] = calculate_electron_density(sols[i], satlatlonalt, h_centered, dn, contribution=contribution,f107=my_f107, f107a=my_f107a, f107p=my_f107p, apmsis=my_apmsis, az=az, ze=ze)
+        # FIXME - commenting out for speed up
+        # nes[i] = calculate_electron_density(sols[i], satlatlonalt, h_centered, dn, contribution=contribution,f107=my_f107, f107a=my_f107a, f107p=my_f107p, apmsis=my_apmsis, az=az, ze=ze)
+        nes[i] = np.zeros_like(sols[i])
 
     # Find the optimal regularization parameter using the maximum second derivative method
     reg_corner = Maximum_Curvature_gradiens(residual,seminorm,reg_param,method=method)
@@ -158,4 +193,4 @@ def custom_l25(date='2020-01-02', epoch=100, stripe=3, limb=150.,
     return (br,err,ver,np.sqrt(np.diagonal(Sig_ver)),ne,
         # np.sqrt(np.diagonal(Sig_Ne)),residual,seminorm,reg_corner,sols,
         np.sqrt(np.diagonal(Sig_Ne)),residual,seminorm,reg_corner,nes,sols,
-        br_orig,err_orig,h_centered)
+        br_orig,err_orig,h_centered, A)

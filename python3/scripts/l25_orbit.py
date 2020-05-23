@@ -6,15 +6,16 @@ from shutil import copyfile
 import iconfuv
 
 path_dir = '/home/kamo/resources/iconfuv/nc_files/'
-date = '2020-01-11'
+date = '2020-03-20'
 orbit = 5
 stripe = 3 # 0-5
 stripe = None
 
-file_l1 = path_dir + 'l1/ICON_L1_FUV_SWP_{}_v03r000.NC'.format(date)
-file_l2 = path_dir + 'l2/ICON_L2-5_FUV_Night_orbit_fixed_{}_v01r000.NC'.format(date)
-file_anc = path_dir + 'l0/ICON_L0P_FUV_Ancillary_{}_v01r000.NC'.format(date)
-file_GPI = path_dir + 'ICON_Ancillary_GPI_2015-001-to-2020-044_v01r000.NC'
+file_l1 = path_dir + 'l1/ICON_L1_FUV_SWP_{}_v01r000.NC'.format(date)
+file_l2 = path_dir + 'l2/ICON_L2-5_FUV_Night_{}_v01r000.NC'.format(date)
+file_anc = path_dir + 'l0/ICON_L0P_FUV_Ancillary_{}_v99r019.NC'.format(date)
+# file_anc = path_dir + 'l0/ICON_L0P_FUV_Ancillary_{}_v01r000.NC'.format(date)
+file_GPI = path_dir + 'ICON_Ancillary_GPI_2015-001-to-2020-132_v01r000.NC'
 
 file_l1_mod = file_l1.split('SWP')[0] + 'SWP_orbit' + file_l1.split('SWP')[1]
 copyfile(file_l1, file_l1_mod)

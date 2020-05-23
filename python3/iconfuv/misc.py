@@ -5,6 +5,51 @@ from skimage.draw import line_aa
 from scipy.signal import correlate, convolve2d
 from skimage.transform import radon
 from itertools import product
+import pandas as pd
+from dateutil import parser
+
+path_dir = '/home/kamo/resources/iconfuv/nc_files/'
+
+def profiler(l1):
+    mirror_dir = ['M9','M6','M3','P0','P3','P6']
+    if 'ICON_L1_FUVB_CCD_TEMP' in list(l1.variables.keys()):
+        profname = 'ICON_L1_FUVB_LWP_PROF_'
+    else:
+        profname = 'ICON_L1_FUVA_SWP_PROF_'
+
+    br = l1.variables[profname+'%s' % mirror_dir[0]][:]
+    profiles = np.zeros((6, br.shape[0], br.shape[1]))
+    for i in range(6):
+        profiles[i] = l1.variables[profname+'%s' % mirror_dir[i]][:]
+    return profiles
+
+def embed_epoch(file, date):
+    df=pd.read_csv(file)
+    df = df[df['date']==date].copy()
+    df = df.reset_index(drop=True)
+    file_l2 = lastfile(path_dir + 'l2/ICON_L2-5_FUV_Night_{}_v01r*'.format(date))
+    l2 = netCDF4.Dataset(file_l2, mode='r')
+    dates = [df['date'][i]+'/'+df['utc'][i] for i in range(len(df))]
+    df['utc']=dates
+    df=df.drop(['date'], axis=1)
+    dn = []
+    for d in l2.variables['ICON_L25_UTC_Time']:
+        dn.append(parser.parse(d))
+    dn = np.array(dn)
+    eps = [np.argmin(abs(parser.parse(df['utc'][i])-dn)) for i in range(len(df))]
+    lats = [l2.variables['ICON_L25_O_Plus_Profile_Latitude'][ee,-1,ss] for ee,ss in zip(eps,df['stripe'])]
+    lons = [l2.variables['ICON_L25_O_Plus_Profile_Longitude'][ee,-1,ss] for ee,ss in zip(eps,df['stripe'])]
+    o_lats = l2.variables['ICON_L25_Observatory_Position_Latitude'][eps]
+    o_lons = l2.variables['ICON_L25_Observatory_Position_Longitude'][eps]
+    orbs = l2.variables['ICON_L25_Orbit_Number'][eps]
+    df['epoch'] = eps
+    df['lats'] = lats
+    df['lons'] = lons
+    df['o_lats'] = o_lats
+    df['o_lons'] = o_lons
+    df['orbits'] = orbs
+    l2.close()
+    return df
 
 def lastfile(x):
     """
@@ -138,26 +183,26 @@ def sliding_min(x, winsize=5, mode='reflect'):
         return out
 
 
-def get_br(date='2020-01-03', epoch=300, stripe=None, v=3, r=0, size='full', swapaxes=False):
+def get_br(date='2020-01-03', epoch=300, stripe=None, v=3, r=0, size='full', swapaxes=False, mode=2):
     i0 = 256 if size=='full' else 156
     path_dir = '/home/kamo/resources/iconfuv/nc_files/'
     file_l1 = path_dir + 'l1/ICON_L1_FUV_SWP_{}_v{:02d}r{:03d}.NC'.format(date,v,r)
-    file_anc = path_dir + 'l0/ICON_L0P_FUV_Ancillary_{}_v01r000.NC'.format(date)
+    # file_anc = path_dir + 'l0/ICON_L0P_FUV_Ancillary_{}_v01r000.NC'.format(date)
     l1 = netCDF4.Dataset(file_l1, mode='r')
-    anc = netCDF4.Dataset(file_anc, mode='r')
+    # anc = netCDF4.Dataset(file_anc, mode='r')
     mirror_dir = ['M9','M6','M3','P0','P3','P6']
-    mode = l1.variables['ICON_L1_FUV_Mode'][:]
-    mode_night = (mode == 2).astype(np.int)
+    mode_l1 = l1.variables['ICON_L1_FUV_Mode'][:]
+    mode_night = (mode_l1 == mode).astype(np.int)
     nights = np.diff(mode_night, prepend=0)
     nights[nights==-1] = 0
-    idxs = np.where(mode==2)[0][:]
+    idxs = np.where(mode_l1==mode)[0][:]
     nights = np.cumsum(nights)[idxs]
-    orbits = anc.variables['ICON_ANCILLARY_FUV_ORBIT_NUMBER'][idxs]
-    orbit = orbits[epoch]
+    # orbits = anc.variables['ICON_ANCILLARY_FUV_ORBIT_NUMBER'][idxs]
+    # orbit = orbits[epoch]
     night = nights[epoch]
-    orbit_ind = np.where(orbits==orbit)[0]
+    # orbit_ind = np.where(orbits==orbit)[0]
     night_ind = np.where(nights==night)[0]
-    print('Epoch:{}\nOrbit:{}\nOrbit Inds:[{}-{}]'.format(epoch, orbit, orbit_ind[0], orbit_ind[-1]))
+    # print('Epoch:{}\nOrbit:{}\nOrbit Inds:[{}-{}]'.format(epoch, orbit, orbit_ind[0], orbit_ind[-1]))
     print('Epoch:{}\nNight:{}\nNight Inds:[{}-{}]'.format(epoch, night, night_ind[0], night_ind[-1]))
     if stripe is not None:
         br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[stripe]][idxs[night_ind],256-i0:]

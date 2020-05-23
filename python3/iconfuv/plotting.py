@@ -10,6 +10,7 @@ from mpl_toolkits.basemap import Basemap
 from airglow.FUV_L2 import l1_correction_orbit
 
 def loncorrect(lon):
+    lon = np.array(lon)
     if lon.size==1:
         if lon > 180:
             lon -= 360
@@ -329,8 +330,12 @@ def tohban2(file_l2=None, png_stub=None, file_l1=None, file_anc=None, stripe=Non
             for lbl in labels_x:
                 hh,mm = [np.int(i) for i in lbl.split(':')]
                 tick_ind = np.argmin(abs(minlist - (hh*60+mm)))
-                locstr = u'{:02d}:{:02d}'.format(dn2_hour[orbit_ind[tick_ind]], dn2_min[orbit_ind[tick_ind]])
-                labels_x2.append('{}'.format(locstr))
+                if dn2_hour.mask[orbit_ind[tick_ind]]==False:
+                    locstr = u'{:02d}:{:02d}'.format(dn2_hour[orbit_ind[tick_ind]], dn2_min[orbit_ind[tick_ind]])
+                    labels_x2.append('{}'.format(locstr))
+                else:
+                    labels_x2.append('')
+
 
             axes[0].set_xticklabels(labels_x2)
             axes[1].set_xticklabels(labels_x2)

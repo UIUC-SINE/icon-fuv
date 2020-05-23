@@ -1,20 +1,25 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from airglow.helpers import custom_l25
+from airglow.inversion_helpers import custom_l25
 
-date = '2020-01-11'
+date = '2020-01-20'
 br_custom = True
-method='curvature'
+method='derivative'
 weight_resid = False
 reg_order = 2
-stripe = 4
-epoch = 595
+stripe = 3
+epoch = 58
 
 # %% inversion
 (br,br_err,ver,ver_err,ne,ne_err,residual,seminorm,reg_corner,nes,
-    vers,br_orig,br_err_orig,h)= custom_l25(date=date, method=method,
-    epoch=epoch, stripe=stripe, l1_rev='v03r000', anc_rev='v01r000',
-    weight_resid=weight_resid, reg_order=reg_order, br_custom=br_custom)
+    vers,br_orig,br_err_orig,h,A)= custom_l25(date=date, method=method,
+    epoch=epoch, stripe=stripe, l1_rev='v03r000', anc_rev='v01r001',
+    weight_resid=weight_resid, reg_order=reg_order, iri_comp=False)
+
+(br_iri,br_err_iri,ver_iri,ver_err_iri,ne_iri,ne_err_iri,residual,seminorm,reg_corner,nes,
+    vers,br_orig,br_err_orig,h,A)= custom_l25(date=date, method=method,
+    epoch=epoch, stripe=stripe, l1_rev='v03r000', anc_rev='v01r001',
+    weight_resid=weight_resid, reg_order=reg_order, iri_comp=True)
 
 # %% plotting
 fig, ax = plt.subplots(ncols=2, figsize=(14,4.8))

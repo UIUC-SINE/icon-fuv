@@ -58,10 +58,10 @@ def plotter(layout, date):
             os.mkdir('{}/stripe{}'.format(path_fig,i))
             print('stripe: {}'.format(i+1))
             tohban2(
-                # file_l1=path_dir+'l1/ICON_L1_FUV_SWP_{}_v77r000.NC'.format(date),
+                file_l1=path_dir+'l1/ICON_L1_FUV_SWP_{}_v77r000.NC'.format(date),
                 # file_l2=path_dir+'l2/ICON_L2-5_FUV_Night_{}_v01r001.NC'.format(date),
                 # file_anc=path_dir+'l0/ICON_L0P_FUV_Ancillary_{}_v01r003.NC'.format(date),
-                file_l1=file_l1_raw,
+                # file_l1=file_l1_raw,
                 file_l2=file_l2,
                 file_anc=file_anc,
                 png_stub=path_fig+'stripe{}/ICON_L2-5_FUV_Night_{}_v01r000.png'.format(i, date),
