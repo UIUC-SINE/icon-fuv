@@ -129,8 +129,8 @@ def uncertainty_calculator(
 ):
     """
     Computes the 1-sigma uncertainties of the profiles given 1 day of data for
-    one stripe. Requires the saa and day indices to be provided, night indices
-    are optional. A separate gain calculation is performed for night data.
+    one stripe. Requires the day indices to be provided, night indices are
+    optional. A separate gain calculation is performed for night data.
     Computed gain(s) are also returned together with the uncertainty profiles.
 
     Args:
@@ -157,7 +157,7 @@ def uncertainty_calculator(
     profile_ff = profile_raw / profile_flatfield
 
     if background_mean is not None:
-        # if a single altitude profile is provided, copy it along time indices
+        # if a single altitude profile is provided, copy it along the time indices
         if len(np.squeeze(background_mean).shape) == 1:
             background_mean = np.repeat(
                 background_mean[np.newaxis,:], len(profile_ff), axis=0
