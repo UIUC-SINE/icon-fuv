@@ -1,10 +1,11 @@
-# Ulas Kamaci - 2020-05-23
-# uncertainty_calculation v1.1
+# Ulas Kamaci - 2020-06-01
+# uncertainty_calculation v2.0
 # uncertainty_calculator is the main function where gain_calculator_day and
 # night are called within that.
 
 import numpy as np
 from scipy.signal import fftconvolve
+from scipy.ndimage import median_filter
 
 def gain_calculator_day(signalday,background_std,profile_flatfield):
     """
@@ -72,14 +73,27 @@ def gain_calculator_night(signalnight,profile_flatfield):
     Returns:
         gain_night (float): computed gain value
     """
+    sigind = np.argsort(np.sum(signalnight,axis=1))[int(0.1*len(signalnight)):]
+    ind_nonzero = np.where(profile_flatfield[sigind[0]]!=1)[0]
+    br = signalnight[sigind[:,np.newaxis], ind_nonzero[np.newaxis,:]]
+
+    # run outlier elimination to get rid of the bad data
+    br_med = median_filter(br, size=(1,15))
+    br_diff = br - br_med
+    filt = abs(br_diff) > 30
+    br_filt = br.copy()
+    br_filt[filt==1] = br_med[filt==1]
+
     # low pass filter nightside along the altitude dimension
     # this will be used as the mean of the signal
-    signalnight_lp = fftconvolve(signalnight, 0.1*np.ones((1,10)), mode='same')
+    signalnight_lp = fftconvolve(br_filt, 0.1*np.ones((1,10)), mode='same')
 
     # transform all the 2d arrays into 1d arrays
-    signalnight = signalnight.flatten()
+    signalnight = br_filt.flatten()
     signalnight_lp = signalnight_lp.flatten()
-    profile_flatfield = profile_flatfield.flatten()
+    profile_flatfield = profile_flatfield[
+        sigind[:,np.newaxis], ind_nonzero[np.newaxis,:]
+    ].flatten()
 
     # find the indices corresponding to the smallest 10 percent of the low pass signal
     # to characterize the background variance (more reliable than the saa data)
@@ -152,11 +166,28 @@ def uncertainty_calculator(
             profile_raw
         gain_day (float): computed gain value from day profiles
         gain_night (float): computed gain value from night profiles. optional
+        background_mean (ndarray): computed background mean from saa data.
+            optional
+        background_saa (ndarray): computed background standard deviation from
+            saa data. optional
     """
+    # copy the arrays first so that modifications inside the function doesnt
+    # affect the original arrays
+    profile_flatfield = profile_flatfield.copy()
+    profile_raw = profile_raw.copy()
+
+    # if there are NaN values in the profiles, set them to zero
+    profile_flatfield[np.isnan(profile_flatfield)] = 0
+    profile_raw[np.isnan(profile_raw)] = 0
+
+    # set the small values to 1 to prevent division errors
+    profile_flatfield[profile_flatfield < 1] = 1
+
     # perform flatfielding
     profile_ff = profile_raw / profile_flatfield
 
     if background_mean is not None:
+        calculated_background = False
         # if a single altitude profile is provided, copy it along the time indices
         if len(np.squeeze(background_mean).shape) == 1:
             background_mean = np.repeat(
@@ -167,6 +198,7 @@ def uncertainty_calculator(
             )
 
     else:
+        calculated_background = True
         # take the saa indices to calculate the background parameters
         background_saa = profile_ff[index_saa]
 
@@ -216,8 +248,14 @@ def uncertainty_calculator(
         )
 
         uncertainty_profile = np.sqrt(signal_variance + background_std**2)
-        return uncertainty_profile, gain_day, gain_night
+        if calculated_background is True:
+            return uncertainty_profile, gain_day, gain_night, background_mean, background_std
+        else:
+            return uncertainty_profile, gain_day, gain_night
 
     else:
         uncertainty_profile = np.sqrt(signal_variance + background_std**2)
-        return uncertainty_profile, gain_day
+        if calculated_background is True:
+            return uncertainty_profile, gain_day, background_mean, background_std
+        else:
+            return uncertainty_profile, gain_day
