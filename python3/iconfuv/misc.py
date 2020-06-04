@@ -21,6 +21,7 @@ def profiler(l1):
     profiles = np.zeros((6, br.shape[0], br.shape[1]))
     for i in range(6):
         profiles[i] = l1.variables[profname+'%s' % mirror_dir[i]][:]
+    profiles = np.swapaxes(profiles, 1, 2)
     return profiles
 
 def embed_epoch(file, date):
@@ -30,7 +31,7 @@ def embed_epoch(file, date):
     file_l2 = lastfile(path_dir + 'l2/ICON_L2-5_FUV_Night_{}_v01r*'.format(date))
     l2 = netCDF4.Dataset(file_l2, mode='r')
     dates = [df['date'][i]+'/'+df['utc'][i] for i in range(len(df))]
-    df['utc']=dates
+    df['utc'] = dates
     df=df.drop(['date'], axis=1)
     dn = []
     for d in l2.variables['ICON_L25_UTC_Time']:
@@ -42,12 +43,12 @@ def embed_epoch(file, date):
     o_lats = l2.variables['ICON_L25_Observatory_Position_Latitude'][eps]
     o_lons = l2.variables['ICON_L25_Observatory_Position_Longitude'][eps]
     orbs = l2.variables['ICON_L25_Orbit_Number'][eps]
-    df['epoch'] = eps
-    df['lats'] = lats
-    df['lons'] = lons
-    df['o_lats'] = o_lats
-    df['o_lons'] = o_lons
-    df['orbits'] = orbs
+    df['l25_epoch'] = eps
+    df['tangent150_lats'] = lats
+    df['tangent150_lons'] = lons
+    df['iconsc_lats'] = o_lats
+    df['iconsc_lons'] = o_lons
+    df['icon_orbits'] = orbs
     l2.close()
     return df
 

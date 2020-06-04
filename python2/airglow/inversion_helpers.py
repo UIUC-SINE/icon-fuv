@@ -47,12 +47,13 @@ def custom_destarring_orbit(l1, epoch, stripe):
     return br_corrected[stripe, idx_new], br_err_modified[stripe, idx_new]
 
 def custom_l25(date='2020-01-02', epoch=100, stripe=3, limb=150.,
-    contribution='RRMN', l1_rev='v03r000', anc_rev='v01r000', method='derivative',
-    weight_resid=False, reg_order=2, reg_param=0, br_fact=None, iri_comp=False):
+    contribution='RR', l1_rev='v03r000', anc_rev='v01r000', method='derivative',
+    weight_resid=False, reg_order=2, reg_param=0, br_fact=None, iri_comp=False,
+    nonnegative=False):
 
     file_l1 = path_dir + 'l1/ICON_L1_FUV_SWP_{}_{}.NC'.format(date, l1_rev)
     file_anc = path_dir + 'l0/ICON_L0P_FUV_Ancillary_{}_{}.NC'.format(date, anc_rev)
-    file_GPI = path_dir + 'ICON_Ancillary_GPI_2015-001-to-2020-044_v01r000.NC'
+    file_GPI = path_dir + 'ICON_Ancillary_GPI_2015-001-to-2020-132_v01r000.NC'
 
     anc = netCDF4.Dataset(file_anc, mode='r')
     l1 = netCDF4.Dataset(file_l1, mode='r')
@@ -62,7 +63,6 @@ def custom_l25(date='2020-01-02', epoch=100, stripe=3, limb=150.,
 
     mode = l1.variables['ICON_L1_FUV_Mode'][:]
     idx = np.where(mode==2)[0][epoch]
-    idx=0
     dn = parser.parse(anc.variables['ICON_ANCILLARY_FUV_TIME_UTC'][idx])
 
     # Read the geophysical indeces
@@ -93,7 +93,11 @@ def custom_l25(date='2020-01-02', epoch=100, stripe=3, limb=150.,
 
     # Only consider values above the limb
     limb_i = np.where(np.squeeze(tanalts)>=limb)[0]
-    br, err = custom_destarring_orbit(l1, epoch, stripe)
+    # br, err = custom_destarring_orbit(l1, epoch, stripe)
+    br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_CLEAN' % mirror_dir[stripe]][idx,:]
+    err = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[stripe]][idx,:]
+    if nonnegative is True:
+        br[br<0] = 0
     br = br[limb_i]
     if br_fact is not None:
         br /= br_fact
@@ -123,7 +127,7 @@ def custom_l25(date='2020-01-02', epoch=100, stripe=3, limb=150.,
     if iri_comp:
         br, phot_nn = FUV_F.get_Photons_from_Brightness_Profile_1356_nighttime(
             ze,az,satlatlonalt[0],satlatlonalt[1],satlatlonalt[2],dn,
-            cont=1,
+            cont=2,
             symmetry=0, # 0 = spherical symmetry
             shperical=0, # 0 = spherical earth
             step = 100., # step size for line-of-sight integral. Larger --> runs faster

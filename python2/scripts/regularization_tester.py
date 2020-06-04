@@ -2,23 +2,28 @@ import numpy as np
 import matplotlib.pyplot as plt
 from airglow.inversion_helpers import custom_l25
 
-date = '2020-01-20'
+date = '2019-11-16'
 br_custom = True
 method='derivative'
 weight_resid = False
 reg_order = 2
-stripe = 3
-epoch = 58
+stripe = 2
+epoch = 150
 
 # %% inversion
 (br,br_err,ver,ver_err,ne,ne_err,residual,seminorm,reg_corner,nes,
     vers,br_orig,br_err_orig,h,A)= custom_l25(date=date, method=method,
-    epoch=epoch, stripe=stripe, l1_rev='v03r000', anc_rev='v01r001',
+    epoch=epoch, stripe=stripe, l1_rev='v00r000', anc_rev='v01r001',
     weight_resid=weight_resid, reg_order=reg_order, iri_comp=False)
+
+(brp,br_err,verp,ver_err,nep,nep_err,residual,seminorm,reg_corner,nes,
+    vers,br_orig,br_err_orig,h,A)= custom_l25(date=date, method=method,
+    epoch=epoch, stripe=stripe, l1_rev='v00r000', anc_rev='v01r001',
+    weight_resid=weight_resid, reg_order=reg_order, nonnegative=True)
 
 (br_iri,br_err_iri,ver_iri,ver_err_iri,ne_iri,ne_err_iri,residual,seminorm,reg_corner,nes,
     vers,br_orig,br_err_orig,h,A)= custom_l25(date=date, method=method,
-    epoch=epoch, stripe=stripe, l1_rev='v03r000', anc_rev='v01r001',
+    epoch=epoch, stripe=stripe, l1_rev='v00r000', anc_rev='v01r001',
     weight_resid=weight_resid, reg_order=reg_order, iri_comp=True)
 
 # %% plotting
