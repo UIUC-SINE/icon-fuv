@@ -1264,24 +1264,24 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
 "implicit in the inversion that the emission rate is constant within the layer between tangent altitudes).")
 
     # FUV look direction AZ and ZE
-    var = _create_variable(ncfile, 'ICON_L25_Solar_Azimuth_Angle_Profile', L25_dict['FUV_AZ'],
+    var = _create_variable(ncfile, 'ICON_L25_Celestial_Azimuth_Angle_Profile', L25_dict['FUV_AZ'],
                           dimensions=('Epoch','Altitude','Stripe'),
                           format_nc='f8', format_fortran='F', desc='FOV Celestial Azimuth',
                           display_type='Time_Series', field_name='FOV Celestial Azimuth', fill_value=-999, label_axis='Time', bin_location=0.5,
                           units='degrees', valid_min=0., valid_max=360., var_type='support_data',
                           chunk_sizes=[1,ncfile.dimensions['Altitude'].size,ncfile.dimensions['Stripe'].size],
                           depend_0 = 'Epoch', depend_1='Altitude',depend_2='Stripe',
-                          notes="The azimuth angles associated with the brightness measurements. Each pixel of the instrument has "
+                          notes="Celestial azimuth angles associated with the brightness measurements. Each pixel of the instrument has "
 "its own azimuth angle associated with its line of sight.")
 
-    var = _create_variable(ncfile, 'ICON_L25_Solar_Zenith_Angle_Profile', L25_dict['FUV_ZE'],
+    var = _create_variable(ncfile, 'ICON_L25_Celestial_Zenith_Angle_Profile', L25_dict['FUV_ZE'],
                           dimensions=('Epoch','Altitude','Stripe'),
                           format_nc='f8', format_fortran='F', desc='FOV Celestial Zenith',
                           display_type='Time_Series', field_name='FOV Celestial Zenith', fill_value=-999, label_axis='Time', bin_location=0.5,
                           units='degrees', valid_min=0., valid_max=180., var_type='support_data',
                           chunk_sizes=[1,ncfile.dimensions['Altitude'].size,ncfile.dimensions['Stripe'].size],
                           depend_0 = 'Epoch', depend_1='Altitude',depend_2='Stripe',
-                          notes="The zenith angles associated with the brightness measurements. Each pixel of the instrument has "
+                          notes="Celestial zenith angles associated with the brightness measurements. Each pixel of the instrument has "
 "its own zenith angle associated with its line of sight.")
 
     ######### Results Variables #########
@@ -1339,7 +1339,7 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
     # FUV inverted hmF2
     var = _create_variable(ncfile, 'ICON_L25_HMF2', L25_dict['FUV_hmF2'],
                           dimensions=('Epoch','Stripe'),
-                          format_nc='f4', format_fortran='F', desc='Estimated altitudes of the peak O+ densities',
+                          format_nc='f4', format_fortran='F', desc='Altitudes of the peak O+ densities',
                           display_type='Time_Series', field_name='hmF2', fill_value=-999, label_axis='Time', bin_location=0.5,
                           units='km', valid_min=np.float32(130.), valid_max=np.float32(580.), var_type='data', chunk_sizes=[1,1],
                           depend_0 = 'Epoch',depend_1='Stripe',
@@ -1348,7 +1348,7 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
 
     var = _create_variable(ncfile, 'ICON_L25_Latitude', L25_dict['FUV_latmF2'],
                           dimensions=('Epoch','Stripe'),
-                          format_nc='f4', format_fortran='F', desc='Estimated latitudes of the peak O+ densities in WGS84',
+                          format_nc='f4', format_fortran='F', desc='Latitudes of the peak O+ densities in WGS84',
                           display_type='Time_Series', field_name='NmF2 latitude', fill_value=-999, label_axis='Time', bin_location=0.5,
                           units='degrees North', valid_min=np.float32(-90.), valid_max=np.float32(90.), var_type='data', chunk_sizes=[1,1],
                           depend_0 = 'Epoch',depend_1='Stripe',
@@ -1357,7 +1357,7 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
 
     var = _create_variable(ncfile, 'ICON_L25_Longitude', L25_dict['FUV_lonmF2'],
                           dimensions=('Epoch','Stripe'),
-                          format_nc='f4', format_fortran='F', desc='Estimated longitudes of the peak O+ densities in WGS84',
+                          format_nc='f4', format_fortran='F', desc='Longitudes of the peak O+ densities in WGS84',
                           display_type='Time_Series', field_name='NmF2 longitude', fill_value=-999, label_axis='Time', bin_location=0.5,
                           units='degrees East', valid_min=np.float32(0.), valid_max=np.float32(360.), var_type='data', chunk_sizes=[1,1],
                           depend_0 = 'Epoch',depend_1='Stripe',
@@ -1371,11 +1371,11 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
                           units='degrees', valid_min=0., valid_max=180., var_type='support_data',
                           chunk_sizes=[1,1],
                           depend_0 = 'Epoch', depend_1='Stripe',
-                          notes="The solar zenith angles of the retrieved NmF2 points.")
+                          notes="Solar zenith angles of the retrieved NmF2 points.")
 
     var = _create_variable(ncfile, 'ICON_L25_Magnetic_Latitude', L25_dict['FUV_latmF2_magnetic'],
                           dimensions=('Epoch','Stripe'),
-                          format_nc='f4', format_fortran='F', desc='Estimated latitudes of the peak O+ densities',
+                          format_nc='f4', format_fortran='F', desc='Magnetic latitudes of the peak O+ densities',
                           display_type='Time_Series', field_name='NmF2 magnetic latitude', fill_value=-999, label_axis='Time', bin_location=0.5,
                           units='degrees North', valid_min=np.float32(-90.), valid_max=np.float32(90.), var_type='data', chunk_sizes=[1,1],
                           depend_0 = 'Epoch',depend_1='Stripe',
@@ -1384,7 +1384,7 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
 
     var = _create_variable(ncfile, 'ICON_L25_Magnetic_Longitude', L25_dict['FUV_lonmF2_magnetic'],
                           dimensions=('Epoch','Stripe'),
-                          format_nc='f4', format_fortran='F', desc='Estimated longitudes of the peak O+ densities',
+                          format_nc='f4', format_fortran='F', desc='Magnetic longitudes of the peak O+ densities',
                           display_type='Time_Series', field_name='NmF2 magnetic longitude', fill_value=-999, label_axis='Time', bin_location=0.5,
                           units='degrees East', valid_min=np.float32(0.), valid_max=np.float32(360.), var_type='data', chunk_sizes=[1,1],
                           depend_0 = 'Epoch',depend_1='Stripe',
@@ -1753,6 +1753,7 @@ def Get_lvl2_5_product(file_input = None,
         FUV_TANGENT_LATITUDES = ancillary.variables['ICON_ANCILLARY_FUVA_TANGENTPOINTS_LATLONALT'][:,:,:,0]
         FUV_TANGENT_LONGITUDES = ancillary.variables['ICON_ANCILLARY_FUVA_TANGENTPOINTS_LATLONALT'][:,:,:,1]
         FUV_TANGENT_ALTITUDES = ancillary.variables['ICON_ANCILLARY_FUVA_TANGENTPOINTS_LATLONALT'][:,:,:,2]
+        FUV_TANGENT_SZA = ancillary.variables['ICON_ANCILLARY_FUVA_TANGENTPOINTS_SZA'][:,:,:]
 
         # The az/el of the look vector
         FUV_AZ = ancillary.variables['ICON_ANCILLARY_FUVA_FOV_AZIMUTH_ANGLE'][:,:,:]
@@ -1814,7 +1815,7 @@ def Get_lvl2_5_product(file_input = None,
         FUV_tangent_lat = np.zeros(np.shape(FUV_TANGENT_LATITUDES))*np.nan
         FUV_tangent_lon = np.zeros(np.shape(FUV_TANGENT_LONGITUDES))*np.nan
         FUV_tangent_alt = np.zeros(np.shape(FUV_TANGENT_ALTITUDES))*np.nan
-        FUV_sza = np.zeros(np.shape(FUV_TANGENT_ALTITUDES))*np.nan
+        FUV_za = np.zeros(np.shape(FUV_TANGENT_ALTITUDES))*np.nan
         FUV_az = np.zeros(np.shape(FUV_TANGENT_ALTITUDES))*np.nan
 
         # Variables to keep track of the indices of the valid range of limb pixels
@@ -1873,6 +1874,8 @@ def Get_lvl2_5_product(file_input = None,
                     az = az[::-1]
                     ze = np.squeeze(FUV_ZE[ind,limb_i0,stripe])
                     ze = ze[::-1]
+                    sza = np.squeeze(FUV_TANGENT_SZA[ind,limb_i0,stripe])
+                    sza = sza[::-1]
 
                     # Time of observation
                     # TODO: CHECK THAT ANC AND FUV DATES ARE THE SAME
@@ -1902,7 +1905,7 @@ def Get_lvl2_5_product(file_input = None,
                     FUV_tangent_lat[ind,limb_i,stripe] = np.squeeze(FUV_TANGENT_LATITUDES[ind,limb_i0,stripe])[::-1]
                     FUV_tangent_lon[ind,limb_i,stripe] = np.squeeze(FUV_TANGENT_LONGITUDES[ind,limb_i0,stripe])[::-1]
                     FUV_tangent_alt[ind,limb_i,stripe] = h_centered
-                    FUV_sza[ind,limb_i,stripe] = ze
+                    FUV_za[ind,limb_i,stripe] = ze
                     FUV_az[ind,limb_i,stripe] = az
 
 
@@ -1912,7 +1915,7 @@ def Get_lvl2_5_product(file_input = None,
                     idx_hmf2 = (np.abs(h_centered - hm)).argmin()
                     latm = np.squeeze(FUV_tangent_lat[ind,limb_i,stripe])[idx_hmf2]
                     lonm = np.squeeze(FUV_tangent_lon[ind,limb_i,stripe])[idx_hmf2]
-                    FUV_szamF2[ind, stripe] = ze[idx_hmf2]
+                    FUV_szamF2[ind, stripe] = sza[idx_hmf2]
                     # Calculate the magnetic latitude and longitudes
                     apex_point = apexpy.Apex(date=FUV_dn[ind].year)
                     lat_magnetic,lon_magnetic = apex_point.convert(
@@ -1968,7 +1971,7 @@ def Get_lvl2_5_product(file_input = None,
         'FUV_TANGENT_LON': FUV_tangent_lon[night_ind,min_li:max_li+1,:],
         'FUV_TANGENT_ALT': FUV_tangent_alt[night_ind,min_li:max_li+1,:],
         'FUV_AZ': FUV_az[night_ind,min_li:max_li+1,:],
-        'FUV_ZE': FUV_sza[night_ind,min_li:max_li+1,:],
+        'FUV_ZE': FUV_za[night_ind,min_li:max_li+1,:],
         'ICON_WGS_LATITUDE': ICON_WGS84_LATITUDE[night_ind],
         'ICON_WGS_LONGITUDE': ICON_WGS84_LONGITUDE[night_ind],
         'ICON_WGS_ALTITUDE': ICON_WGS84_ALTITUDE[night_ind],
