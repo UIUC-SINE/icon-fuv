@@ -1,5 +1,5 @@
-# Ulas Kamaci - 2020-05-23
-# artifact_removal v1.0
+# Ulas Kamaci - 2020-05-27
+# artifact_removal v1.2
 # given a day of brightness profiles in Rayleighs, performs star removal and hot
 # pixel correction on the profiles.
 
@@ -142,13 +142,17 @@ def artifact_removal(profiles, channel, fuv_mode):
 
     Args:
         profiles (ndarray): 1 day of all stripe profiles in Rayleighs with dimension
-            (6,epoch,256)
+            [6,256,epoch]
         channel (int): integer specifying the FUV channel (1:SW, 2:LW)
         fuv_mode (ndarray): ICON_L1_FUV_Mode variable where 1:day, 2:night
 
     Returns:
-        profiles_cleaned (ndarray): artifact removed profiles
+        profiles_cleaned (ndarray): artifact removed profiles, same dimension
+            as profiles
     '''
+    # swap the epoch and altitude axes of the profiles
+    profiles = np.swapaxes(profiles, 1, 2)
+
     # make sure input is a masked array; if not, create a masked array from it
     if not np.ma.is_masked(profiles):
         profiles = np.ma.array(profiles, mask=np.isnan(profiles))
@@ -172,7 +176,11 @@ def artifact_removal(profiles, channel, fuv_mode):
                 br=profiles[:,idxs[orbit_ind],:].filled(fill_value=0),
                 mode=mode
             )
-            profiles_cleaned[:, idxs[orbit_ind],:] = np.ma.array(
-                br_corrected, mask=profiles[:,idxs[orbit_ind],:].mask
-            ).filled(fill_value=np.nan)
+            profiles_cleaned[:, idxs[orbit_ind],:] = br_corrected
+
+    profiles_cleaned.mask = profiles.mask
+    profiles_cleaned = profiles_cleaned.filled(fill_value=np.nan)
+
+    # swap the epoch and altitude axes back again to match the input dimension
+    profiles_cleaned = np.swapaxes(profiles_cleaned, 1, 2)
     return profiles_cleaned
