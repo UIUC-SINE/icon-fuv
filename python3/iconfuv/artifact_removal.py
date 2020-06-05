@@ -1,5 +1,5 @@
-# Ulas Kamaci - 2020-05-27
-# artifact_removal v1.2
+# Ulas Kamaci - 2020-06-04
+# artifact_removal v1.3
 # given a day of brightness profiles in Rayleighs, performs star removal and hot
 # pixel correction on the profiles.
 
@@ -124,7 +124,7 @@ def artifact_removal_orbit(br, mode):
     '''
     if mode == 1:
         # apply star removal
-        _, br_corrected = medfilt3d(br, threshold=100, win_size=(1,1,10), mode=mode)
+        _, br_corrected = medfilt3d(br, threshold=100, win_size=(3,3,10), mode=mode)
     elif mode == 2:
         # apply star removal
         _, br_corrected = medfilt3d(br, threshold=50, mode=mode)
