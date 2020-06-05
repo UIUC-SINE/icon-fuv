@@ -2368,9 +2368,15 @@ def CreateSummaryPlot(file_netcdf, png_stub, stripe=2, min_alt=None, max_alt=Non
                     tick_ind = np.argmin(abs(minlist - (hh*60+mm)))
                     lon0 = Op_lon[orbit_ind[tick_ind]]
                     lat0 = Op_lat[orbit_ind[tick_ind]]
-                    if Op_lon.mask[orbit_ind[tick_ind]]==False:
-                        locstr = u'{:02d}:{:02d}'.format(dn2_hour[orbit_ind[tick_ind]], dn2_min[orbit_ind[tick_ind]])
-                        labels_x2.append('{}\n{:.0f}\n{:.0f}'.format(locstr, lon0, lat0))
+                    if Op_lon.mask.size==1:
+                        if Op_lon.mask==False:
+                            locstr = u'{:02d}:{:02d}'.format(dn2_hour[orbit_ind[tick_ind]], dn2_min[orbit_ind[tick_ind]])
+                            labels_x2.append('{}\n{:.0f}\n{:.0f}'.format(locstr, lon0, lat0))
+                        else:
+                            labels_x2.append('')
+                    elif Op_lon.mask[orbit_ind[tick_ind]]==False:
+                            locstr = u'{:02d}:{:02d}'.format(dn2_hour[orbit_ind[tick_ind]], dn2_min[orbit_ind[tick_ind]])
+                            labels_x2.append('{}\n{:.0f}\n{:.0f}'.format(locstr, lon0, lat0))
                     else:
                         labels_x2.append('')
 
