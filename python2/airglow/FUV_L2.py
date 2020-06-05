@@ -1772,7 +1772,14 @@ def Get_lvl2_5_product(file_input = None,
 
         # Get brightness and uncertainty profiles from file after pre-processing.
         mirror_dir = ['M9','M6','M3','P0','P3','P6']
-        FUV_1356_IMAGE, FUV_1356_ERROR = l1_preprocessing(data)
+        FUV_1356_IMAGE = np.zeros(np.shape(FUV_AZ))
+        FUV_1356_ERROR = np.zeros(np.shape(FUV_AZ))
+        for ind, d in enumerate(mirror_dir):
+            FUV_1356_IMAGE[:,:,ind] = data.variables['ICON_L1_FUVA_SWP_PROF_%s_CLEAN' % d][:]
+            FUV_1356_ERROR[:,:,ind] = data.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % d][:]
+
+        # set the negative brightness values to zero
+        FUV_1356_IMAGE[FUV_1356_IMAGE<0] = 0
 
         # Get observation times from file and store in a datetime variable
         temp = ancillary.variables['ICON_ANCILLARY_FUV_TIME_UTC']
@@ -2250,7 +2257,7 @@ def CreateSummaryPlot(file_netcdf, png_stub, stripe=2, min_alt=None, max_alt=Non
             dn.append(parser.parse(d))
         dn = np.array(dn)
 
-        dn2 = f.variables['ICON_L25_Solar_Local_Time'][:,stripe] # local time
+        dn2 = f.variables['ICON_L25_Local_Solar_Time'][:,stripe] # local time
         dn2_hour = dn2.astype(np.int)
         dn2_min = ((dn2-dn2_hour)*60).astype(np.int)
 

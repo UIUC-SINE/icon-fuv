@@ -27,7 +27,7 @@ def tohban(l2=None, l1=None, anc=None, epoch=None, stripe=None):
         dn.append(parser.parse(d))
     dn = np.array(dn)
 
-    dn2 = l2.variables['ICON_L25_Solar_Local_Time'][:,stripe] # local time
+    dn2 = l2.variables['ICON_L25_Local_Solar_Time'][:,stripe] # local time
     dn2_hour = dn2.astype(np.int)
     dn2_min = ((dn2-dn2_hour)*60).astype(np.int)
 
@@ -177,7 +177,7 @@ def tohban2(file_l2=None, png_stub=None, file_l1=None, file_anc=None, stripe=Non
         dn.append(parser.parse(d))
     dn = np.array(dn)
 
-    dn2 = l2.variables['ICON_L25_Solar_Local_Time'][:,stripe] # local time
+    dn2 = l2.variables['ICON_L25_Local_Solar_Time'][:,stripe] # local time
     dn2_hour = dn2.astype(np.int)
     dn2_min = ((dn2-dn2_hour)*60).astype(np.int)
 
@@ -218,7 +218,7 @@ def tohban2(file_l2=None, png_stub=None, file_l1=None, file_anc=None, stripe=Non
             Ze = l2.variables['ICON_L25_O_Plus_Density_Error'][orbit_ind,:,stripe]
 
             mirror_dir = ['M9','M6','M3','P0','P3','P6']
-            br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[stripe]][idx,:]
+            br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_CLEAN' % mirror_dir[stripe]][idx,:]
             br_er = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[stripe]][idx,:]
 
             out = np.diff(X,axis=0)
