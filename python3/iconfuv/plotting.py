@@ -165,9 +165,8 @@ def tohban(l2=None, l1=None, anc=None, epoch=None, stripe=None):
     # axes[1].set_xticklabels(labels_x2)
     # axes[0].set_xticklabels(labels_x2)
 
-def tohban2(file_l2=None, png_stub=None, file_l1=None, file_anc=None, stripe=None, max_ne=None, max_br=None):
+def tohban2(file_l2=None, png_stub=None, file_l1=None, stripe=None, max_ne=None, max_br=None):
     mirror_dir = ['M9','M6','M3','P0','P3','P6']
-    anc = netCDF4.Dataset(file_anc, mode='r')
     l1 = netCDF4.Dataset(file_l1, mode='r')
     l2 = netCDF4.Dataset(file_l2, mode='r')
 
@@ -330,12 +329,17 @@ def tohban2(file_l2=None, png_stub=None, file_l1=None, file_anc=None, stripe=Non
             for lbl in labels_x:
                 hh,mm = [np.int(i) for i in lbl.split(':')]
                 tick_ind = np.argmin(abs(minlist - (hh*60+mm)))
-                if dn2_hour.mask[orbit_ind[tick_ind]]==False:
+                if dn2_hour.mask.size==1:
+                    if dn2_hour.mask==False:
+                        locstr = u'{:02d}:{:02d}'.format(dn2_hour[orbit_ind[tick_ind]], dn2_min[orbit_ind[tick_ind]])
+                        labels_x2.append('{}'.format(locstr))
+                    else:
+                        labels_x2.append('')
+                elif dn2_hour.mask[orbit_ind[tick_ind]]==False:
                     locstr = u'{:02d}:{:02d}'.format(dn2_hour[orbit_ind[tick_ind]], dn2_min[orbit_ind[tick_ind]])
                     labels_x2.append('{}'.format(locstr))
                 else:
                     labels_x2.append('')
-
 
             axes[0].set_xticklabels(labels_x2)
             axes[1].set_xticklabels(labels_x2)
@@ -350,7 +354,6 @@ def tohban2(file_l2=None, png_stub=None, file_l1=None, file_anc=None, stripe=Non
 
     l1.close()
     l2.close()
-    anc.close()
 
 def tohban_l1(file_l1_raw=None, file_l1_ar=None, png_dir=None, stripes=None, both=True):
     if stripes is None:
