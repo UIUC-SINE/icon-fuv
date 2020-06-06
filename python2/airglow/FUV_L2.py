@@ -295,30 +295,27 @@ def Tikhonov(A, Bright, reg_deg, reg_param=0., Sig_Bright=None, weight_resid=Fal
         Bright = W.dot(Bright)
         Sig_Bright = np.eye(len(Bright)) # whitening diagonalizes the covariance matrix
 
-
-    # Check if reg_param is a vector or not
-    if np.size(reg_param) == 1:
-        # if its not a vector only if zero it will calculate the vector. Otherwise it will use the single value given.
-        if reg_param == 0:
-            reg_param = create_alpha_values(A)
-
-    residual = np.zeros(len(reg_param))
-    seminorm = np.zeros(len(reg_param))
-
     # create the matrix that defines the order of the regularization.
     L = get_rough_matrix(len(Bright),reg_deg)
 
-    # For every regularization parameter, estimate solution
-    for i in range(0,len(reg_param)):
-        sol = calc_solution(A,Bright,reg_param[i],L) # for speed, we can omit the uncertainty prop here
-        r = A.dot(sol) - Bright
-        residual[i] = np.linalg.norm(r)
-        seminorm[i] = np.linalg.norm(L.dot(sol))
+    if reg_param == 0:
+        reg_param = create_alpha_values(A)
+    elif np.size(reg_param) > 1:
+        residual = np.zeros(len(reg_param))
+        seminorm = np.zeros(len(reg_param))
 
-    # Find the optimal regularization parameter using the maximum second derivative method
-    reg_corner = Maximum_Curvature_gradiens(residual,seminorm,reg_param,method='derivative')
-    # FIXME
-    # reg_corner = 2500.
+        # For every regularization parameter, estimate solution
+        for i in range(0,len(reg_param)):
+            sol = calc_solution(A,Bright,reg_param[i],L) # for speed, we can omit the uncertainty prop here
+            r = A.dot(sol) - Bright
+            residual[i] = np.linalg.norm(r)
+            seminorm[i] = np.linalg.norm(L.dot(sol))
+
+        # Find the optimal regularization parameter using the maximum second derivative method
+        reg_corner = Maximum_Curvature_gradiens(residual,seminorm,reg_param,method='derivative')
+
+    else:
+        reg_corner = reg_param
 
     # Calculate the solution with the optimal parameter (and, if desired, also the uncertainty)
     if Sig_Bright is None:
@@ -1719,6 +1716,8 @@ def Get_lvl2_5_product(file_input = None,
     contribution ='RRMN'
     # specify the regularization method as the Tikhonov regularization
     reg_method = 'Tikhonov'
+    # specify the regularization parameter for Tikhonov
+    reg_param = 2500.
     # specify if whitening will occur in the inversion
     weight_resid = False
 
@@ -1902,7 +1901,8 @@ def Get_lvl2_5_product(file_input = None,
                                                        Sig_Bright = np.diag(err**2), weight_resid=weight_resid,
                                                        limb = limb,Spherical = Spherical, reg_method = reg_method,
                                                        regu_order = regu_order, contribution =contribution,dn = dn,
-                                                       f107=my_f107, f107a=my_f107a, f107p=my_f107p, apmsis=my_apmsis)
+                                                       f107=my_f107, f107a=my_f107a, f107p=my_f107p, apmsis=my_apmsis,
+                                                       reg_param=reg_param)
 
                     # Save the values to output arrays
                     FUV_ver[ind,limb_i,stripe] = ver
@@ -2186,7 +2186,12 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None,  inv_error=0
                 binary_code[3] = 1
         # Digit 4: Unexpected hmF2 value
         if Ne is not None:
-            if (np.argmax(Ne) < 10) or (hmF2 > 400):
+            if (
+                (np.argmax(Ne) < 10) or
+                (hmF2 > 400) or
+                (np.argmax(Ne) > len(Ne) - 10) or
+                (hmF2 < 175)
+            ):
                 binary_code[4] = 1
 
         # Calculate the inversion quality
