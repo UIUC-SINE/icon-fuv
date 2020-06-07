@@ -2015,6 +2015,10 @@ def Get_lvl2_5_product(file_input = None,
     if exception_counter > 0 and exception_counter < inversion_counter:
         print 'There were errors in the inversions, but available good data were processed. Percentage of the processed data is: %.2f%%' %(100. - 100.*exception_counter/float(inversion_counter))
 
+    elif inversion_counter == 0:
+        print('No good data available, output will not be produced')
+        return 0
+
     elif exception_counter > 0 and exception_counter == inversion_counter:
         print 'There were errors in all the inversions, data could not be processed. Output file will not be produced.'
         return 0
