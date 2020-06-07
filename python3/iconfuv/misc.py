@@ -10,19 +10,37 @@ from dateutil import parser
 
 path_dir = '/home/kamo/resources/iconfuv/nc_files/'
 
-def profiler(l1):
+def profiler(l1, err=False, clean=False):
     mirror_dir = ['M9','M6','M3','P0','P3','P6']
+    foo = '_CLEAN' if clean else ''
     if 'ICON_L1_FUVB_CCD_TEMP' in list(l1.variables.keys()):
         profname = 'ICON_L1_FUVB_LWP_PROF_'
     else:
         profname = 'ICON_L1_FUVA_SWP_PROF_'
 
-    br = l1.variables[profname+'%s' % mirror_dir[0]][:]
+    br = l1.variables[profname+'{}{}'.format(mirror_dir[0], foo)][:]
     profiles = np.zeros((6, br.shape[0], br.shape[1]))
     for i in range(6):
-        profiles[i] = l1.variables[profname+'%s' % mirror_dir[i]][:]
+        profiles[i] = l1.variables[profname+'{}{}'.format(mirror_dir[i], foo)][:]
+    if err is True:
+        profiles_err = np.zeros((6, br.shape[0], br.shape[1]))
+        for i in range(6):
+            profiles_err[i] = l1.variables[profname+'%s_Error' % mirror_dir[i]][:]
+        profiles = np.swapaxes(profiles, 1, 2)
+        profiles_err = np.swapaxes(profiles_err, 1, 2)
+        return profiles, profiles_err
+
     profiles = np.swapaxes(profiles, 1, 2)
     return profiles
+
+def index_finder(data, utc):
+    dn = parser.parse(utc)
+    dns = []
+    for x in data.variables['ICON_L25_UTC_Time'][:]:
+        dns.append(parser.parse(x).replace(tzinfo=None))
+    dns = np.array(dns)
+    return np.argmin(abs(dns-dn))
+
 
 def embed_epoch(file, date):
     df=pd.read_csv(file)

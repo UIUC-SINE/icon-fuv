@@ -2178,14 +2178,14 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None,  inv_error=0
         if not (l1_quality==0 or l1_quality==1):
             binary_code[1] = 1
         # Digit 2: Very low input signal level
-        if bright is not None:
+        if (bright is not None) and (np.size(bright)>10):
             if np.mean(bright) < 10:
                 binary_code[2] = 1
         # Digit 3: Low input signal level
             elif (np.mean(bright) < 15) or (np.max(bright) < 100):
                 binary_code[3] = 1
         # Digit 4: Unexpected hmF2 value
-        if Ne is not None:
+        if ((Ne is not None) and (np.size(Ne) > 10)):
             if (
                 (np.argmax(Ne) < 10) or
                 (hmF2 > 400) or

@@ -47,7 +47,7 @@ def custom_destarring_orbit(l1, epoch, stripe):
     return br_corrected[stripe, idx_new], br_err_modified[stripe, idx_new]
 
 def custom_l25(date='2020-01-02', epoch=100, stripe=3, limb=150.,
-    contribution='RR', l1_rev='v03r000', anc_rev='v01r000', method='derivative',
+    contribution='RRMN', l1_rev='v03r000', anc_rev='v01r000', method='derivative',
     weight_resid=False, reg_order=2, reg_param=0, br_fact=None, iri_comp=False,
     nonnegative=False):
 
@@ -98,6 +98,7 @@ def custom_l25(date='2020-01-02', epoch=100, stripe=3, limb=150.,
     err = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[stripe]][idx,:]
     if nonnegative is True:
         br[br<0] = 0
+        # br+=25
     br = br[limb_i]
     if br_fact is not None:
         br /= br_fact
@@ -179,11 +180,12 @@ def custom_l25(date='2020-01-02', epoch=100, stripe=3, limb=150.,
         residual[i] = np.linalg.norm(r)
         seminorm[i] = np.linalg.norm(L.dot(sols[i]))
         # FIXME - commenting out for speed up
-        # nes[i] = calculate_electron_density(sols[i], satlatlonalt, h_centered, dn, contribution=contribution,f107=my_f107, f107a=my_f107a, f107p=my_f107p, apmsis=my_apmsis, az=az, ze=ze)
-        nes[i] = np.zeros_like(sols[i])
+        nes[i] = calculate_electron_density(sols[i], satlatlonalt, h_centered, dn, contribution=contribution,f107=my_f107, f107a=my_f107a, f107p=my_f107p, apmsis=my_apmsis, az=az, ze=ze)
+        # nes[i] = np.zeros_like(sols[i])
 
     # Find the optimal regularization parameter using the maximum second derivative method
     reg_corner = Maximum_Curvature_gradiens(residual,seminorm,reg_param,method=method)
+    # reg_corner = 2500.
 
     # Calculate the solution with the optimal parameter (and, if desired, also the uncertainty)
     if Sig_Bright is None:
