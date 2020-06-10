@@ -1779,6 +1779,7 @@ def Get_lvl2_5_product(file_input = None,
                     lat_magnetic,lon_magnetic = apex_point.convert(
                         latm,lonm,'geo','qd',height=hm
                     )
+                    lon_magnetic = lon_magnetic+360 if lon_magnetic < 0 else lon_magnetic
                     FUV_hmF2[ind,stripe] = hm
                     FUV_latmF2[ind,stripe] = latm
                     FUV_lonmF2[ind,stripe] = lonm
