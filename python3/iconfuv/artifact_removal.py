@@ -1,10 +1,11 @@
-# Ulas Kamaci - 2020-06-04
-# artifact_removal v1.3
+# Ulas Kamaci - 2020-07-31
+# artifact_removal v1.4
 # given a day of brightness profiles in Rayleighs, performs star removal and hot
 # pixel correction on the profiles.
 
 import numpy as np
 from scipy.ndimage import median_filter
+from scipy.signal import convolve2d
 
 def sliding_min(x, winsize=5, mode='reflect'):
     '''
@@ -62,6 +63,8 @@ def medfilt3d(br, threshold, win_size=(5,10,10), mode=2):
     br = br.copy()
     br_med = median_filter(br, size=win_size)
     br_diff = br - br_med
+    brmed = np.nanmedian(br, axis=0)
+    brmean = np.nanmean(br, axis=0)
     # daytime mode
     if mode == 1:
         filter = br_diff > threshold
@@ -77,8 +80,12 @@ def medfilt3d(br, threshold, win_size=(5,10,10), mode=2):
         filter = br_diff > threshold
         br_filt = br.copy()
         ind = (filter==1)
+        indsig = (brmed > 40) & (brmean - brmed < 20)
+        ind = ind * (1 - np.repeat(indsig[np.newaxis], 6, axis=0))
+        ind = ind.astype(bool)
         br_filt[ind] = br_med[ind]
         return filter, br_filt
+
 
 def hot_pixel_correction(br):
     '''
@@ -101,10 +108,10 @@ def hot_pixel_correction(br):
         br_corrected (ndarray): artifact removed profiles
     '''
     brx = np.mean(br, axis=1)
-    brx_min = sliding_min(brx, winsize=5)
+    brx_lp = convolve2d(brx, 0.1*np.ones((1,10)), mode='same', boundary='symm')
     br_cor = br.copy()
     for i in range(6):
-        diff = brx[i] - brx_min[i]
+        diff = brx[i] - brx_lp[i]
         br_cor[i] -= diff
     return br_cor
 
