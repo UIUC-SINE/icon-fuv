@@ -168,7 +168,7 @@ def uncertainty_calculator(
         gain_night (float): computed gain value from night profiles. optional
         background_mean (ndarray): computed background mean from saa data.
             optional
-        background_saa (ndarray): computed background standard deviation from
+        background_std (ndarray): computed background standard deviation from
             saa data. optional
     """
     # copy the arrays first so that modifications inside the function doesnt
