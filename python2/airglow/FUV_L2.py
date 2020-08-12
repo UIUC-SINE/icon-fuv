@@ -32,6 +32,7 @@ import apexpy
 # From the scipy module we need the optimize, linalg.sqrtm, io.netcdf, interpolate.interp1d
 import scipy
 from scipy import interpolate
+from scipy.ndimage import convolve1d
 
 # From the time modeule we need the gmtime, strftime functions
 import time
@@ -299,7 +300,7 @@ def Tikhonov(A, Bright, reg_deg, reg_param=0., Sig_Bright=None, weight_resid=Fal
 
     if reg_param == 0:
         reg_param = create_alpha_values(A)
-    elif np.size(reg_param) > 1:
+    if np.size(reg_param) > 1:
         residual = np.zeros(len(reg_param))
         seminorm = np.zeros(len(reg_param))
 
@@ -2025,6 +2026,7 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None,  inv_error=0
     try:
         # generate the binary code
         inv_quality = 1
+        quality_code = 0
         num_codes = 5
         binary_code = np.zeros(num_codes)
         # Digit 0: Error in the inversion
@@ -2035,10 +2037,17 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None,  inv_error=0
             binary_code[1] = 1
         # Digit 2: Very low input signal level
         if (bright is not None) and (np.size(bright)>10):
-            if np.mean(bright) < 10:
+            br_lp = convolve1d(bright, 0.1*np.ones((10)), mode='reflect')
+            br_hp = bright - br_lp
+            mi = max(min(np.nanargmax(br_lp),len(br_lp)-20), 20)
+            sigmean = np.nanmean(br_lp[mi-20:mi+20])
+            noisestd = np.nanstd(br_hp[mi-20:mi+20])
+            if (sigmean < 2 * noisestd) or (sigmean < 5):
                 binary_code[2] = 1
         # Digit 3: Low input signal level
-            elif (np.mean(bright) < 15) or (np.max(bright) < 100):
+            elif (sigmean < 10) and (sigmean < 4 * noisestd):
+                binary_code[3] = 1
+            elif (sigmean < 3 * noisestd):
                 binary_code[3] = 1
         # Digit 4: Unexpected hmF2 value
         if ((Ne is not None) and (np.size(Ne) > 10)):
@@ -2063,7 +2072,6 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None,  inv_error=0
         ):
             inv_quality = 0.5
 
-        quality_code = 0
         for i in range(num_codes):
             quality_code += (2**i) * binary_code[i]
 
