@@ -2037,16 +2037,14 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None,  inv_error=0
             binary_code[1] = 1
         # Digit 2: Very low input signal level
         if (bright is not None) and (np.size(bright)>10):
-            br_lp = convolve1d(bright, 0.1*np.ones((10)), mode='reflect')
+            br_lp = convolve1d(bright, 0.05*np.ones((20)), mode='reflect')
             br_hp = bright - br_lp
             mi = max(min(np.nanargmax(br_lp),len(br_lp)-20), 20)
             sigmean = np.nanmean(br_lp[mi-20:mi+20])
-            noisestd = np.nanstd(br_hp[mi-20:mi+20])
-            if (sigmean < 2 * noisestd) or (sigmean < 5):
+            noisestd = np.nanstd(br_hp)
+            if (sigmean < 2 * noisestd):
                 binary_code[2] = 1
         # Digit 3: Low input signal level
-            elif (sigmean < 10) and (sigmean < 4 * noisestd):
-                binary_code[3] = 1
             elif (sigmean < 3 * noisestd):
                 binary_code[3] = 1
         # Digit 4: Unexpected hmF2 value
