@@ -19,7 +19,7 @@ def plotter(layout, date):
         plt.close()
         l1.close()
     if layout=='toh':
-        file_l2 = lastfile(path_dir+'l2/ICON_L2-5_FUV_Night_{}_v01r*'.format(date))
+        file_l2 = lastfile(path_dir+'l2/ICON_L2-5_FUV_Night_{}_v03r*'.format(date))
         path_fig = path_dir + 'figures/tohban/{}/'.format(date)
         if not os.path.isdir(path_fig):
             os.mkdir(path_fig)
@@ -65,7 +65,7 @@ def plotter(layout, date):
                 stripe=i
             )
     elif layout=='tohl1':
-        file_l1_raw = lastfile(path_dir + 'l1/ICON_L1_FUV_SWP_{}_v03r*'.format(date))
+        file_l1 = lastfile(path_dir + 'l1/ICON_L1_FUV_SWP_{}_v02r*'.format(date))
         path_fig = path_dir + 'figures/tohban_l1/{}/'.format(date)
         if not os.path.isdir(path_fig):
             os.mkdir(path_fig)
@@ -77,10 +77,9 @@ def plotter(layout, date):
                 os.mkdir(path_fig)
                 break
         tohban_l1(
-            file_l1_raw=file_l1_raw,
-            file_l1_ar=path_dir+'l1/ICON_L1_FUV_SWP_{}_v77r000.NC'.format(date),
+            file_l1=file_l1,
             png_dir=path_fig,
-            stripes=[3],
+            # stripes=[3],
             both=True
         )
 

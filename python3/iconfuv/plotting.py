@@ -7,7 +7,7 @@ import netCDF4, datetime
 from dateutil import parser
 from copy import deepcopy
 from mpl_toolkits.basemap import Basemap
-from airglow.FUV_L2 import l1_correction_orbit
+# from airglow.FUV_L2 import l1_correction_orbit
 
 def loncorrect(lon):
     lon = np.array(lon)
@@ -355,12 +355,10 @@ def tohban2(file_l2=None, png_stub=None, file_l1=None, stripe=None, max_ne=None,
     l1.close()
     l2.close()
 
-def tohban_l1(file_l1_raw=None, file_l1_ar=None, png_dir=None, stripes=None, both=True):
+def tohban_l1(file_l1=None, png_dir=None, stripes=None, both=True):
     if stripes is None:
         stripes = [0,1,2,3,4,5]
-    if file_l1_ar is not None:
-        l1_ar = netCDF4.Dataset(file_l1_ar, mode='r')
-    l1 = netCDF4.Dataset(file_l1_raw, mode='r')
+    l1 = netCDF4.Dataset(file_l1, mode='r')
     mirror_dir = ['M9','M6','M3','P0','P3','P6']
     mode = l1.variables['ICON_L1_FUV_Mode'][:]
     dn = parser.parse(l1.variables['ICON_L1_FUVA_SWP_Center_Times'][10])
@@ -369,7 +367,7 @@ def tohban_l1(file_l1_raw=None, file_l1_ar=None, png_dir=None, stripes=None, bot
     nights[nights==-1] = 0
     idxs = np.where(mode==2)[0][:]
     nights = np.cumsum(nights)[idxs]
-    alt_size = 120
+    alt_size = 150
     for night in np.unique(nights):
         night_ind = np.where(nights==night)[0]
         br = np.zeros((6, len(night_ind), alt_size))
@@ -378,14 +376,11 @@ def tohban_l1(file_l1_raw=None, file_l1_ar=None, png_dir=None, stripes=None, bot
             br[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[i]][idxs[night_ind],-alt_size:].filled(fill_value=0)
             br_err[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[i]][idxs[night_ind],-alt_size:].filled(fill_value=0)
         if both is True:
-            if file_l1_ar is not None:
-                br_corrected = np.zeros((6, len(night_ind), alt_size))
-                br_err_modified = np.zeros((6, len(night_ind), alt_size))
-                for i in range(6):
-                    br_corrected[i] = l1_ar.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[i]][idxs[night_ind],-alt_size:].filled(fill_value=0)
-                    br_err_modified[i] = l1_ar.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[i]][idxs[night_ind],-alt_size:].filled(fill_value=0)
-            else:
-                br_corrected, br_err_modified = l1_correction_orbit(br.copy(), br_err.copy())
+            br_corrected = np.zeros((6, len(night_ind), alt_size))
+            br_err_modified = np.zeros((6, len(night_ind), alt_size))
+            for i in range(6):
+                br_corrected[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_CLEAN' % mirror_dir[i]][idxs[night_ind],-alt_size:].filled(fill_value=0)
+                br_err_modified[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[i]][idxs[night_ind],-alt_size:].filled(fill_value=0)
         for stripe in stripes:
             file_png = png_dir + 'stripe_{}_orbit_{}.png'.format(stripe, night)
             if both is True:
@@ -403,7 +398,7 @@ def tohban_l1(file_l1_raw=None, file_l1_ar=None, png_dir=None, stripes=None, bot
             fig.colorbar(im1, cax=cax, orientation='vertical')
             ax[1].set_title('Uncertainty')
             if both is True:
-                im2=ax[2].imshow(np.flipud(br_corrected[stripe].swapaxes(0,1)), aspect='auto')
+                im2=ax[2].imshow(np.flipud(br_corrected[stripe].swapaxes(0,1)), aspect='auto', vmin=0)
                 divider = make_axes_locatable(ax[2])
                 cax = divider.append_axes('right', size='5%', pad=0.05)
                 fig.colorbar(im2, cax=cax, orientation='vertical')
