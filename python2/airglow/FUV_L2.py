@@ -13,7 +13,7 @@ Todo:
 # These need to be manually changed, when necessary.
 # NOTE: When the major version is updated, you should change the History global attribute
 software_version_major = 1 # Should only be incremented on major changes
-software_version_minor = 13 # [0-99], increment on ALL published changes, resetting when the major version changes
+software_version_minor = 14 # [0-99], increment on ALL published changes, resetting when the major version changes
 software_version = float(software_version_major)+software_version_minor/1000.
 ####################################################################################################
 
@@ -28,6 +28,7 @@ import datetime
 
 # A module to perform coordinate conversions
 import apexpy
+import astral
 
 # From the scipy module we need the optimize, linalg.sqrtm, io.netcdf, interpolate.interp1d
 import scipy
@@ -106,10 +107,154 @@ def get_FUV_instrument_constants():
 
     return instrument
 
+def conjugate_point(glat, glon, galt,
+                    date=datetime.date.today(),
+                    cgalt=None):
+    '''
+    Calculates the geomagnetic conjugate point.
+    Input:
+        glat    :    geo latitude in degrees [-90, 90]
+        glon    :    geo longitude in degrees [0, 360]
+        galt    :    altitude in km
+        date    :    datetime object. Used to calculate magnetic coordinates
+    Output:
+        cglat    :    magnetic latitude of the conjugate point
+        cglon    :    magnetic longitude of the conjugate point
+        calt     :    altitude of the conjugate point
+    '''
+    if cgalt is None: cgalt = galt
+
+    apObj = apexpy.Apex(date=date)
+    cglat, cglon, err = apObj.map_to_height(glat, glon, galt,
+                                            cgalt,
+                                            conjugate=True)
+    return(cglat, cglon, cgalt)
+
+def points_in_sunlit(glats, glons, galts, dt=datetime.datetime.now()):
+    '''
+    Return what percent of the geographic points (raypath) are in the sunlit. From 0 to 1.
+    Input:
+        glats    :    array-like. Geo latitudes [-90, 90]
+        glons    :    array-like. Geo longitudes [0, 360]
+        galts    :    array-like. Altitudes in km
+        dt       :    datetime object
+    Output:
+        percent    :    From 0 to 1. 0 when all points are in the darkness.
+    '''
+    obj = astral.Astral()
+
+    N = 0
+    i = 0
+    for glat, glon, galt in zip(glats, glons, galts):
+        N += 1
+
+        solar_el = obj.solar_elevation(dt, glat, glon)
+        adj = obj._depression_adjustment(galt*1e3)
+
+        if solar_el + adj > 0:
+            i += 1
+
+    perc = (1.0*i)/N
+
+    return(perc)
+
+def conjugate_points_in_sunlit(glats, glons, galts,
+                              dt=datetime.datetime.now()):
+    '''
+    Return what percent of the magnetically conjugate points are in the sunlit.
+    From 0 (0%) to 1 (100%).
+    Input: Set of points
+        glats    :    array-like. Geo latitudes in degrees [-90, 90]
+        glons    :    array-like. Geo longitudes in degrees [0, 360]
+        galts    :    array-like. Altitudes in km
+        dt       :    datetime object
+    Output:
+        percent    :    From 0 to 1.
+                        1 when all the conjugate points are sunlit.
+    '''
+
+    clats, clons, calts = conjugate_point(glats, glons, galts,
+                                          date=dt.date())
+
+    sunlit_perc = points_in_sunlit(clats, clons, calts, dt)
+
+    return(sunlit_perc, clats, clons, calts)
+
+def line_of_sight_in_sunlit(satlatlonalt,
+                            az, ze,
+                            date,
+                            conjugate=True,
+                            step_size = 0.4e3,
+                            total_distance = 4.0e3):
+    '''
+    Starting at the satellite, step along a line of sight, and return the percent
+    of (equally-spaced) points in the sunlit.
+
+    INPUTS:
+       * satlatlonalt - array [latitude (deg), longitude (deg), altitude (km)] of the satellite
+       * az - direction of line of sight. degrees east of north.
+       * ze - direction of line of sight. degrees down from zenith
+       * date - datetime object (yy/mm/dd-HH:MM:SS). Date required to calculate sun location and
+                to convert geographic coordinates to magnetic coordinates
+       * conjugate - When True, return the percent of the magnetically conjugate points
+                     in the sunlit.
+
+    OPTIONAL INPUTS:
+       * step_size - spacing between points in the returned array (km).
+       * total_distance - length of the projected line (km).
+    Output:
+       * percent - From 0 (0%) to 1 (100%). 1 when all the conjugate points are sunlit.
+    '''
+
+    _, los_latlonalt = ic.project_line_of_sight(satlatlonalt,
+                                                  az, ze,
+                                                  step_size = step_size,
+                                                  total_distance = total_distance)
+
+    if conjugate:
+        sunlit_perc, _, _, _ = conjugate_points_in_sunlit(los_latlonalt[0],
+                                                          los_latlonalt[1],
+                                                          los_latlonalt[2],
+                                                          date)
+    else:
+        sunlit_perc, _, _, _ = points_in_sunlit(los_latlonalt[0],
+                                                los_latlonalt[1],
+                                                los_latlonalt[2],
+                                                date)
+    return(sunlit_perc)
+
+def compensate_background(bright, altitudes,
+                         topside_alt=400,
+                         sublimb_alt=100):
+    '''
+    Background is estimated and corrected using topside alitudes.
+    Skip correction if brightness at topside are lower than in sublimb.
+    INPUTS:
+        bright         - Brightness vector [Rayleigh]
+        altitudes      - Tangent altitudes vector [km]
+        topside_alt    - topside altitude
+        sublimb_alt    - sublimb altitude
+    OUTPUT:
+        bright    - Brightness with background compesated
+    '''
+    #do not consider very low bright values
+    bright = np.where(bright<-200, np.nan, bright)
+
+    ind_topside = (altitudes > topside_alt)
+    ind_sublimb = (altitudes < sublimb_alt)
+
+    bgnd_topside = np.nanmedian(bright[ind_topside])
+    bgnd_sublimb = np.nanmedian(bright[ind_sublimb])
+
+    #Compesate background only if topside bgnd is lower than sublimb bgnd
+    if bgnd_topside < bgnd_sublimb:
+        bright -= bgnd_topside
+
+    return(bright)
+
 '''
 DISTANCE MATRIX CALCULATIONS
 '''
-
 # Calculation of the Distance matrix assuming Spherical Earth
 def create_cells_Matrix_spherical_symmetry(theta,Horbit,RE=6371.):
     '''
@@ -1142,7 +1287,7 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
     ################################## Dimensions ########################################
     n = np.shape(L25_dict['FUV_TANGENT_ALT'])[1]
     t = np.shape(L25_dict['FUV_TANGENT_ALT'])[0]
-    ncfile.createDimension('Epoch',t)
+    ncfile.createDimension('Epoch',size=None)
     ncfile.createDimension('Altitude', n)
     ncfile.createDimension('Stripe',6)
 
@@ -1444,7 +1589,7 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
                           dimensions=('Epoch','Stripe'),
                           format_nc='i4', format_fortran='I', desc='Provides description about the observed inversion quality',
                           display_type='Time_Series', field_name='Quality Flags', fill_value=-999, label_axis='Time', bin_location=0.5,
-                          units=' ', valid_min=0, valid_max=31, var_type='data', chunk_sizes=[1,ncfile.dimensions['Stripe'].size],
+                          units=' ', valid_min=0, valid_max=63, var_type='data', chunk_sizes=[1,ncfile.dimensions['Stripe'].size],
                           depend_0 = 'Epoch',depend_1='Stripe',
                           notes="This variable is intended to provide a description to the user why `ICON_L25_Quality` is "
 "less than 1, if that is the case. This is a binary coded integer whose binary representation indicates the quality conditions which were "
@@ -1453,7 +1598,8 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
 "2: No reliable quality L1 data available (see L1 quality flag). Makes the quality 0, no retrieval produced. \n"
 "4: Very low input signal level (very low brightness). Makes the quality 0, retrieval available. \n"
 "8: Low input signal level (low brightness). Makes the quality 0.5, retrieval available. \n"
-"16: Unexpected hmF2 value. Makes the quality 0.5, retrieval available."
+"16: Unexpected hmF2 value. Makes the quality 0.5, retrieval available. \n"
+"32: Retrieval affected by unaccounted conjugate photoelectrons. Makes the quality 0.5, retrieval available."
 )
 
     # Inversion Method
@@ -1752,6 +1898,12 @@ def Get_lvl2_5_product(file_input = None,
                     if min(limb_i0) < min_li:
                         min_li = min(limb_i0)
 
+                    # perform background correction on the brightness profiles
+                    # prior to day 2020/130 when the automated background
+                    # determination was implemented on board
+                    if dn < datetime.datetime(2020,5,10, tzinfo=dn.tzinfo):
+                        bright = compensate_background(bright, h)
+
                     # Run the inversion
                     ver,Ne,h_centered,Sig_ver,Sig_Ne = FUV_Level_2_Density_Calculation(bright,h,satlatlonalt,az,ze,
                                                        Sig_Bright = np.diag(err**2), weight_resid=weight_resid,
@@ -1795,8 +1947,16 @@ def Get_lvl2_5_product(file_input = None,
                     FUV_sigma_NmF2[ind,stripe] = sig_Nm
                     FUV_local_time[ind,stripe] = local_time[ind, 255-idx_hmf2, stripe]
 
+                    # calculate the ratio of LoS under sunlight
+                    sunlit_ratio = line_of_sight_in_sunlit(
+                        satlatlonalt,
+                        az[idx_hmf2], ze[idx_hmf2],
+                        date=dn)
+
                     # Check the input, ancillary, and output variables
-                    inv_quality, quality_flag = quality_check(bright=bright, Ne=Ne, hmF2=hm, l1_quality=l1_qual)
+                    inv_quality, quality_flag = quality_check(
+                        bright=bright, Ne=Ne, hmF2=hm, l1_quality=l1_qual,
+                        sunlit_ratio=sunlit_ratio)
 
                     FUV_quality[ind,stripe] = inv_quality
                     FUV_quality_flag[ind,stripe] = quality_flag
@@ -2010,7 +2170,7 @@ def nan_checker(arr):
         return np.arange(len(arr)) # if not, don't do any operation
 
 def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None, inv_error=0,
-                    turret_angle=0):
+                    turret_angle=0, sunlit_ratio=0):
     '''
     Checks a couple of variables and outputs an inversion quality together
     with a quality code that describes quality conditions.
@@ -2020,6 +2180,7 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None, inv_error=0,
         inv_error - Inversion error (binary variable: 1/0)
         l1_quality - quality flag for level 1 brightness profiles
         turret_angle - angle of the turret (float)
+        sunlit_ratio - proportion of LoS under sunlight (between 0 and 1)
     OUTPUTS:
         inv_quality - number that indicates the quality of inversion [0, 0.5, 1]
             1: input data and retrieved data look nominal
@@ -2033,7 +2194,7 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None, inv_error=0,
         # generate the binary code
         inv_quality = 1
         quality_code = 0
-        num_codes = 5
+        num_codes = 6
         binary_code = np.zeros(num_codes)
         # Digit 0: Error in the inversion
         if inv_error is 1:
@@ -2048,7 +2209,7 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None, inv_error=0,
             mi = max(min(np.nanargmax(br_lp),len(br_lp)-20), 20)
             sigmean = np.nanmean(br_lp[mi-20:mi+20])
             noisestd = np.nanstd(br_hp)
-            if (sigmean < 2 * noisestd):
+            if (sigmean < 2 * noisestd) or (sigmean < 1):
                 binary_code[2] = 1
         # Digit 3: Low input signal level
             elif (sigmean < 3 * noisestd):
@@ -2062,6 +2223,9 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None, inv_error=0,
                 (hmF2 < 175)
             ):
                 binary_code[4] = 1
+        # Digit 5: Photoelectron effect
+        if sunlit_ratio > 0.1:
+            binary_code[5] = 1
 
         # Calculate the inversion quality
         if (
@@ -2072,7 +2236,8 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None, inv_error=0,
             inv_quality = 0
         elif (
             binary_code[3] == 1 or
-            binary_code[4] == 1
+            binary_code[4] == 1 or
+            binary_code[5] == 1
         ):
             inv_quality = 0.5
 
