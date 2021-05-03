@@ -4,7 +4,7 @@
 # pixel correction on the profiles.
 
 import numpy as np
-from scipy.ndimage import median_filter
+from scipy.ndimage import median_filter, convolve1d
 from scipy.signal import convolve2d
 
 def sliding_min(x, winsize=5, mode='reflect'):
@@ -86,7 +86,6 @@ def medfilt3d(br, threshold, win_size=(5,10,10), mode=2):
         br_filt[ind] = br_med[ind]
         return filter, br_filt
 
-
 def hot_pixel_correction(br):
     '''
     Function that performs hot pixel correction. It operates on 3d
@@ -115,6 +114,18 @@ def hot_pixel_correction(br):
         br_cor[i] -= diff
     return br_cor
 
+def daynight_index(br, threshold=30):
+    index = br.shape[1]
+    y = np.mean(br, axis=(0,2))
+    y = convolve1d(y, 0.05*np.ones(20), mode='reflect')
+    y1 = np.diff(y)
+    ind = np.sort(np.where(y>threshold)[0])
+    for i in ind:
+        if y1[i] > 5:
+            index = i
+            break
+    return index
+
 def artifact_removal_orbit(br, mode):
     '''
     Function that performs star removal and additionally hot pixel correction
@@ -133,12 +144,20 @@ def artifact_removal_orbit(br, mode):
         # apply star removal
         _, br_corrected = medfilt3d(br, threshold=100, win_size=(3,3,10), mode=mode)
     elif mode == 2:
+        try:
+            # trim the dayside part of the orbit if there's any
+            index = daynight_index(br, threshold=30)
+        except:
+            # in case there is an error
+            index = br.shape[1]
         # apply star removal
-        _, br_corrected = medfilt3d(br, threshold=50, mode=mode)
+        _, br_corrected = medfilt3d(br[:,:index,:], threshold=50, mode=mode)
         # apply hot pixel correction
         br_corrected = hot_pixel_correction(br_corrected)
         # apply star removal again since it can detect the stars better now
         _, br_corrected = medfilt3d(br_corrected, threshold=10, mode=mode)
+
+        br_corrected = np.append(br_corrected, br[:,index:,:], axis=1)
 
     return br_corrected
 
