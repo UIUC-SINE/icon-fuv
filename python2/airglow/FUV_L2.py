@@ -2234,6 +2234,7 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None, inv_error=0,
             mi = max(min(np.nanargmax(br_lp),len(br_lp)-20), 20)
             sigmean = np.nanmean(br_lp[mi-20:mi+20])
             noisestd = np.nanstd(br_hp)
+            noisestd = max(10, noisestd)
             if (sigmean < 2 * noisestd) or (sigmean < 1):
                 binary_code[2] = 1
         # Digit 3: Low input signal level
