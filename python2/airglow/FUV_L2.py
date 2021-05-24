@@ -1808,6 +1808,11 @@ def Get_lvl2_5_product(file_input = None,
         # Get science mode
         FUV_mode = data.variables['ICON_L1_FUV_Mode'][:]
 
+        # compute the SZA of Tanalt=300km (take the min SZA among 6 stripes)
+        ind = np.max(np.sum(FUV_TANGENT_ALTITUDES < 300, axis=1) - 1, 0)
+        xx, yy = np.meshgrid(np.arange(FUV_mode.shape[0]), np.arange(6), indexing='ij')
+        sza300 = np.min(FUV_TANGENT_SZA[xx,ind,yy], axis=1)
+
         if FUV_mode[FUV_mode==2].shape[0] == 0:
             print 'No nighttime data to process. Output file will not be produced.'
             return 0
@@ -1859,15 +1864,16 @@ def Get_lvl2_5_product(file_input = None,
         night_ind = []
         for ind, (mode, l1_qual) in enumerate(zip(FUV_mode, l1_quality)):
             # Check if we are in night mode
-            print('{}/{} - {}/{}'.format(stripe+1, 6, ind+1, len(FUV_mode)))
+            # print('{}/{} - {}/{}'.format(stripe+1, 6, ind+1, len(FUV_mode)))
             if mode==2:
                 try:
                     # We are in nighttime science mode, process the data
                     # Save the index of this measurement
                     night_ind.append(ind)
-                    if ((l1_qual!=0 and l1_qual!=1) or abs(turret_angle[ind])>1):
+                    if ((l1_qual!=0 and l1_qual!=1) or abs(turret_angle[ind])>1) or sza300[ind]<95:
                         inv_quality, quality_flag = quality_check(
-                            l1_quality=l1_qual, turret_angle=turret_angle[ind])
+                            l1_quality=l1_qual, turret_angle=turret_angle[ind],
+                            sza300=sza300[ind])
                         FUV_quality[ind,stripe] = inv_quality
                         FUV_quality_flag[ind,stripe] = quality_flag
                         continue
@@ -2189,7 +2195,7 @@ def nan_checker(arr):
         return np.arange(len(arr)) # if not, don't do any operation
 
 def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None, inv_error=0,
-                    turret_angle=0, sunlit_ratio=0):
+                    turret_angle=0, sunlit_ratio=0, sza300=None):
     '''
     Checks a couple of variables and outputs an inversion quality together
     with a quality code that describes quality conditions.
@@ -2219,7 +2225,7 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None, inv_error=0,
         if inv_error is 1:
             binary_code[0] = 1
         # Digit 1: Insufficient L1 quality
-        if ((l1_quality!=0 and l1_quality!=1) or abs(turret_angle)>1):
+        if ((l1_quality!=0 and l1_quality!=1) or abs(turret_angle)>1) or sza300<95:
             binary_code[1] = 1
         # Digit 2: Very low input signal level
         if (bright is not None) and (np.size(bright)>10):
