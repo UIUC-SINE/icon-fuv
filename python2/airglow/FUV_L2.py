@@ -12,8 +12,8 @@ Todo:
 ####################################### VERSION CONTROL ############################################
 # These need to be manually changed, when necessary.
 # NOTE: When the major version is updated, you should change the History global attribute
-software_version_major = 1 # Should only be incremented on major changes
-software_version_minor = 14 # [0-99], increment on ALL published changes, resetting when the major version changes
+software_version_major = 4 # Should only be incremented on major changes
+software_version_minor = 0 # [0-99], increment on ALL published changes, resetting when the major version changes
 software_version = float(software_version_major)+software_version_minor/1000.
 ####################################################################################################
 
@@ -203,7 +203,7 @@ def line_of_sight_in_sunlit(satlatlonalt,
        * step_size - spacing between points in the returned array (km).
        * total_distance - length of the projected line (km).
     Output:
-       * percent - From 0 (0%) to 1 (100%). 1 when all the conjugate points are sunlit.
+       * percent - From 0 (0%) to 100 (100%). 100 when all the conjugate points are sunlit.
     '''
 
     _, los_latlonalt = ic.project_line_of_sight(satlatlonalt,
@@ -221,7 +221,7 @@ def line_of_sight_in_sunlit(satlatlonalt,
                                                 los_latlonalt[1],
                                                 los_latlonalt[2],
                                                 date)
-    return(sunlit_perc)
+    return(100. * sunlit_perc)
 
 def compensate_background(bright, altitudes,
                          topside_alt=400,
@@ -1237,8 +1237,8 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
     ncfile.Data_Version =                   np.float32(data_version)
     ncfile.Data_VersionMajor =              np.ubyte(data_versionmajor)
     ncfile.Data_Revision =                  np.ushort(data_revision)
-    ncfile.Date_Stop =                      L25_dict['FUV_dn'][0].strftime('%a, %d %b %Y, %Y-%m-%dT%H:%M:%S.%f')[:-3] + ' UTC' # single measurement: use midpoint
-    ncfile.Date_Start =                     L25_dict['FUV_dn'][-1].strftime('%a, %d %b %Y, %Y-%m-%dT%H:%M:%S.%f')[:-3] + ' UTC' # single measurement: use midpoint
+    ncfile.Date_End =                       L25_dict['FUV_dn'][-1].strftime('%a, %d %b %Y, %Y-%m-%dT%H:%M:%S.%f')[:-3] + ' UTC' # single measurement: use midpoint
+    ncfile.Date_Start =                     L25_dict['FUV_dn'][0].strftime('%a, %d %b %Y, %Y-%m-%dT%H:%M:%S.%f')[:-3] + ' UTC' # single measurement: use midpoint
     ncfile.Description =                    'ICON FUV Nighttime O+ profiles (DP 2.5)'
     ncfile.Descriptor =                     'FUV > Intensified Far Ultraviolet Imager'
     ncfile.Discipline =                     'Space Physics > Ionospheric Science'
@@ -1246,9 +1246,10 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
     ncfile.File_Date =                      t_file.strftime('%a, %d %b %Y, %Y-%m-%dT%H:%M:%S.%f')[:-3] + ' UTC'
     ncfile.Generated_By =                   'ICON SDC > ICON UIUC FUV L2.5 Processor v%.2f, J. J. Makela, D. Iliou' % software_version
     ncfile.Generation_Date =                t_file.strftime('%Y%m%d')
-    ncfile.History =                        'Version %i, %s, %s, ' % (data_version, user_name, t_file.strftime('%Y-%m-%dT%H:%M:%S')) +\
-                                            'FUV L2.5 Processor v%.3f ' % software_version # TODO: Tori suggested we make this a history
-                                                                                              # of the software versions instead of data versions
+    ncfile.setncattr_string('History',      ['FUV L2.5 Processor v4.00: Flag the data affected by conjugate photoelectrons and adjust the qualities accordingly. '
+                                            'Add a new variable `ICON_L25_Sunlit_Conjugate_Raypath_Percentage` to indicate how much the data is affected by photoelectrons '
+                                            '. Fix the Date_Start-Date_End bug., U. Kamaci, 5 Feb 2021 '
+                                            ])
     ncfile.HTTP_LINK =                      'http://icon.ssl.berkeley.edu/Instruments/FUV'
     ncfile.Instrument =                     'FUV'
     ncfile.Instrument_Type =                'Imagers (space)'
@@ -1280,7 +1281,7 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
 "we do not estimate the O+ density profile at tangent altitudes below 150 km (i.e. on the disk). The Altitude dimension is the maximum number of tangent "
 "points that are above 150 km for the entire 24-hour period. The Stripe dimension represents the dimension from left to right along "
 "the horizon for any one given image. Nominally 6 stripes are used, and each stripe samples a 3-degree wide field of view. O+ density profiles are "
-"estimated separately for each stripe."])
+"estimated separately for each stripe. ICON_L25_Quality variable indicates the quality of the retrieved data and it needs to be checked when using the data."])
     ncfile.Time_Resolution =                '12 seconds'
     ncfile.Title =                          'ICON FUV O+ Altitude Profiles (DP 2.5)'
 
@@ -1566,10 +1567,21 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
     var = _create_variable(ncfile, 'ICON_L25_Local_Solar_Time', L25_dict['FUV_local_time'],
                           dimensions=('Epoch','Stripe'),
                           format_nc='f4', format_fortran='F', desc='Local solar times at the retrieved peak O+ density locations',
-                          display_type='Time_Series', field_name='Local_Solar_Time', fill_value=-999, label_axis='Time', bin_location=0.5,
+                          display_type='Time_Series', field_name='Local Solar Time', fill_value=-999, label_axis='Time', bin_location=0.5,
                           units='hours', valid_min=np.float32(0.), valid_max=np.float32(24.0), var_type='data', chunk_sizes=[1,1],
                           depend_0 = 'Epoch',depend_1='Stripe',
                           notes="Local solar times (0-24 hours decimal) at the locations of the retrieved peak O+ densities.")
+
+    # Conjugate raypath sunlit ratio
+    var = _create_variable(ncfile, 'ICON_L25_Sunlit_Conjugate_Raypath_Percentage', L25_dict['FUV_conj_sunlit'],
+                          dimensions=('Epoch','Stripe'),
+                          format_nc='f4', format_fortran='F', desc='Percentage of sunlit conjugate raypath',
+                          display_type='Time_Series', field_name='Sunlit Conj. Raypath Perc.', fill_value=-999, label_axis='Time', bin_location=0.5,
+                          units=' ', valid_min=np.float32(0.), valid_max=np.float32(100.), var_type='support_data', chunk_sizes=[1,1],
+                          depend_0 = 'Epoch',depend_1='Stripe',
+                          notes="For each retrieval, this variable returns what percent of the magnetically conjugate points of "
+"the raypath passing through the NmF2 point are sunlit. Higher value indicates potentially higher contribution in the 135.6 nm "
+"emissions from conjugate photoelectrons.")
 
     # FUV inversion quality flag
     var = _create_variable(ncfile, 'ICON_L25_Quality', L25_dict['FUV_Quality'],
@@ -1582,7 +1594,8 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
 "the statistical error in the O+ density data, it is possible that systematic errors are present, or that the statistical error "
 "estimation is not accurate. If it is suspected that this is the case, the quality will be less than 1.0, which is determined based "
 "on the brightness values and other considerations. If the data are definitely unusable, the quality will be 0.0. Users should "
-"exercise caution when the quality is less than 1.0.")
+"exercise caution when the quality is less than 1.0. The reason for low quality can be learned from the ICON_L25_Quality_Flags "
+"variable.")
 
     # FUV inversion quality code
     var = _create_variable(ncfile, 'ICON_L25_Quality_Flags', L25_dict['FUV_Quality_Flags'],
@@ -1595,11 +1608,12 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
 "less than 1, if that is the case. This is a binary coded integer whose binary representation indicates the quality conditions which were "
 "present during or before the inversion. Here are the quality conditions represented by each digit: \n"
 "1: Error occurred during inversion. Makes the quality 0, no retrieval available. \n"
-"2: No reliable quality L1 data available (see L1 quality flag). Makes the quality 0, no retrieval produced. \n"
+"2: No reliable quality L1 data available. Makes the quality 0, no retrieval produced. \n"
 "4: Very low input signal level (very low brightness). Makes the quality 0, retrieval available. \n"
 "8: Low input signal level (low brightness). Makes the quality 0.5, retrieval available. \n"
 "16: Unexpected hmF2 value. Makes the quality 0.5, retrieval available. \n"
-"32: Retrieval affected by unaccounted conjugate photoelectrons. Makes the quality 0.5, retrieval available."
+"32: Nmf2 retrieval affected by conjugate photoelectron contribution in the measurements that is not modeled in the inversion. If the variable "
+"`ICON_L25_Sunlit_Conjugate_Raypath_Percentage` is more than 10%, this flag is activated. Makes the quality 0.5, retrieval available."
 )
 
     # Inversion Method
@@ -1775,9 +1789,6 @@ def Get_lvl2_5_product(file_input = None,
             FUV_1356_IMAGE[:,:,ind] = data.variables['ICON_L1_FUVA_SWP_PROF_%s_CLEAN' % d][:]
             FUV_1356_ERROR[:,:,ind] = data.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % d][:]
 
-        # set the negative brightness values to zero
-        FUV_1356_IMAGE[FUV_1356_IMAGE<0] = 0
-
         # Get observation times from file and store in a datetime variable
         temp = ancillary.variables['ICON_ANCILLARY_FUV_TIME_UTC']
         FUV_dn = []
@@ -1815,6 +1826,7 @@ def Get_lvl2_5_product(file_input = None,
         FUV_sigma_hmF2 = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
         FUV_NmF2 = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
         FUV_local_time = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
+        FUV_conj_sunlit = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
         FUV_sigma_NmF2 = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
         FUV_quality = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
         FUV_quality_flag = np.zeros((len(FUV_dn),len(mirror_dir)))*np.nan
@@ -1864,9 +1876,24 @@ def Get_lvl2_5_product(file_input = None,
                     # Vector with the space craft lat, lon, alt at the measurement time
                     satlatlonalt = [ICON_WGS84_LATITUDE[ind],ICON_WGS84_LONGITUDE[ind],ICON_WGS84_ALTITUDE[ind]]
 
+                    # Time of observation
+                    # TODO: CHECK THAT ANC AND FUV DATES ARE THE SAME
+                    dn = FUV_dn[ind]
+
+                    bright =  FUV_1356_IMAGE[ind,:,stripe]
+                    # perform background correction on the brightness profiles
+                    # prior to day 2020/130 when the automated background
+                    # determination was implemented on board
+                    if dn < datetime.datetime(2020,5,10, tzinfo=dn.tzinfo):
+                        bright = compensate_background(
+                            bright,
+                            FUV_TANGENT_ALTITUDES[ind,:,stripe]
+                        )
+
+                    bright[bright<0] = 0
                     # Only consider values above the limb
                     limb_i = np.where(np.squeeze(FUV_TANGENT_ALTITUDES[ind,:,stripe])>=limb)[0]
-                    bright = np.squeeze(FUV_1356_IMAGE[ind,limb_i,stripe]) # TODO: THIS IS A MASKED ARRAY. HOW TO HANDLE?
+                    bright = bright[limb_i]
                     unmasked_ind = nan_checker(bright)
                     limb_i0 = limb_i[unmasked_ind].copy()
                     bright = bright[::-1]
@@ -1885,10 +1912,6 @@ def Get_lvl2_5_product(file_input = None,
                     sza = np.squeeze(FUV_TANGENT_SZA[ind,limb_i0,stripe])
                     sza = sza[::-1]
 
-                    # Time of observation
-                    # TODO: CHECK THAT ANC AND FUV DATES ARE THE SAME
-                    dn = FUV_dn[ind]
-
                     # Get the GPI needed to run MSIS
                     my_f107, my_f107a, my_f107p, my_apmsis = get_msisGPI(dn, year_day, f107, f107a, ap, ap3)
 
@@ -1897,12 +1920,6 @@ def Get_lvl2_5_product(file_input = None,
                         max_li = max(limb_i0)
                     if min(limb_i0) < min_li:
                         min_li = min(limb_i0)
-
-                    # perform background correction on the brightness profiles
-                    # prior to day 2020/130 when the automated background
-                    # determination was implemented on board
-                    if dn < datetime.datetime(2020,5,10, tzinfo=dn.tzinfo):
-                        bright = compensate_background(bright, h)
 
                     # Run the inversion
                     ver,Ne,h_centered,Sig_ver,Sig_Ne = FUV_Level_2_Density_Calculation(bright,h,satlatlonalt,az,ze,
@@ -1937,6 +1954,12 @@ def Get_lvl2_5_product(file_input = None,
                         latm,lonm,'geo','qd',height=hm
                     )
                     lon_magnetic = lon_magnetic+360 if lon_magnetic < 0 else lon_magnetic
+                    # calculate the ratio of LoS under sunlight
+                    sunlit_ratio = line_of_sight_in_sunlit(
+                        satlatlonalt,
+                        az[idx_hmf2], ze[idx_hmf2],
+                        date=dn)
+
                     FUV_hmF2[ind,stripe] = hm
                     FUV_latmF2[ind,stripe] = latm
                     FUV_lonmF2[ind,stripe] = lonm
@@ -1946,12 +1969,7 @@ def Get_lvl2_5_product(file_input = None,
                     FUV_NmF2[ind,stripe] = Nm
                     FUV_sigma_NmF2[ind,stripe] = sig_Nm
                     FUV_local_time[ind,stripe] = local_time[ind, 255-idx_hmf2, stripe]
-
-                    # calculate the ratio of LoS under sunlight
-                    sunlit_ratio = line_of_sight_in_sunlit(
-                        satlatlonalt,
-                        az[idx_hmf2], ze[idx_hmf2],
-                        date=dn)
+                    FUV_conj_sunlit[ind,stripe] = sunlit_ratio
 
                     # Check the input, ancillary, and output variables
                     inv_quality, quality_flag = quality_check(
@@ -2014,6 +2032,7 @@ def Get_lvl2_5_product(file_input = None,
         'FUV_latmF2_magnetic': FUV_latmF2_magnetic[night_ind,:],
         'FUV_lonmF2_magnetic': FUV_lonmF2_magnetic[night_ind,:],
         'FUV_local_time': FUV_local_time[night_ind,:],
+        'FUV_conj_sunlit': FUV_conj_sunlit[night_ind,:],
         'FUV_Quality': FUV_quality[night_ind,:],
         'FUV_Quality_Flags': FUV_quality_flag[night_ind,:],
         'inv_method': "{}_{}".format(reg_method,regu_order),
@@ -2180,7 +2199,7 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None, inv_error=0,
         inv_error - Inversion error (binary variable: 1/0)
         l1_quality - quality flag for level 1 brightness profiles
         turret_angle - angle of the turret (float)
-        sunlit_ratio - proportion of LoS under sunlight (between 0 and 1)
+        sunlit_ratio - percentage of conjugate raypath in the sunlit [0 to 100]
     OUTPUTS:
         inv_quality - number that indicates the quality of inversion [0, 0.5, 1]
             1: input data and retrieved data look nominal
@@ -2224,7 +2243,7 @@ def quality_check(bright=None, Ne=None, hmF2=None, l1_quality=None, inv_error=0,
             ):
                 binary_code[4] = 1
         # Digit 5: Photoelectron effect
-        if sunlit_ratio > 0.1:
+        if sunlit_ratio > 10:
             binary_code[5] = 1
 
         # Calculate the inversion quality
