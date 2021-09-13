@@ -4,7 +4,7 @@ from iconfuv.misc import lastfile
 import numpy as np
 import matplotlib.pyplot as plt
 import os, sys, glob, netCDF4
-path_dir = '/home/kamo/resources/iconfuv/nc_files/'
+path_dir = '/home/kamo/resources/icon-fuv/ncfiles/'
 
 def plotter(layout, date):
     if layout=='mode_l1':
@@ -19,7 +19,7 @@ def plotter(layout, date):
         plt.close()
         l1.close()
     if layout=='toh':
-        file_l2 = lastfile(path_dir+'l2/ICON_L2-5_FUV_Night_{}_v03r*'.format(date))
+        file_l2 = lastfile(path_dir+'l2/ICON_L2-5_FUV_Night_{}_v03r101*'.format(date))
         path_fig = path_dir + 'figures/tohban/{}/'.format(date)
         if not os.path.isdir(path_fig):
             os.mkdir(path_fig)
@@ -36,13 +36,13 @@ def plotter(layout, date):
             CreateSummaryPlot(
                 # file_netcdf=path_dir+'l2/ICON_L2-5_FUV_Night_{}_v01r000.NC'.format(date),
                 file_netcdf=file_l2,
-                png_stub=path_fig+'stripe{}/ICON_L2-5_FUV_Night_{}_v01r000.png'.format(i, date),
+                png_stub=path_fig+'stripe%d/'%i+file_l2[-41:-3]+'_str%d'%i+'.png',
                 stripe=i,
                 max_ne=None
             )
     elif layout=='tohx':
-        file_l1_raw = lastfile(path_dir + 'l1/ICON_L1_FUV_SWP_{}_v03r*'.format(date))
-        file_l2 = lastfile(path_dir+'l2/ICON_L2-5_FUV_Night_{}_v01r*'.format(date))
+        file_l1_raw = lastfile(path_dir + 'l1/ICON_L1_FUV_SWP_{}_v04r*'.format(date))
+        file_l2 = lastfile(path_dir+'l2/ICON_L2-5_FUV_Night_{}_v04r*'.format(date))
         path_fig = path_dir + 'figures/tohban_x/{}/'.format(date)
         if not os.path.isdir(path_fig):
             os.mkdir(path_fig)
@@ -61,11 +61,13 @@ def plotter(layout, date):
                 # file_l2=path_dir+'l2/ICON_L2-5_FUV_Night_{}_v01r001.NC'.format(date),
                 file_l1=file_l1_raw,
                 file_l2=file_l2,
-                png_stub=path_fig+'stripe{}/ICON_L2-5_FUV_Night_{}_v01r000.png'.format(i, date),
-                stripe=i
+                png_stub=path_fig+'stripe%d/'%i+file_l2[-41:-3]+'_str%d'%i+'.png',
+                stripe=i,
+                # min_br=-5,
+                max_br=50
             )
     elif layout=='tohl1':
-        file_l1 = lastfile(path_dir + 'l1/ICON_L1_FUV_SWP_{}_v02r*'.format(date))
+        file_l1 = lastfile(path_dir + 'l1/ICON_L1_FUV_SWP_{}_v90r*'.format(date))
         path_fig = path_dir + 'figures/tohban_l1/{}/'.format(date)
         if not os.path.isdir(path_fig):
             os.mkdir(path_fig)
@@ -79,7 +81,7 @@ def plotter(layout, date):
         tohban_l1(
             file_l1=file_l1,
             png_dir=path_fig,
-            # stripes=[3],
+            stripes=[3],
             both=True
         )
 

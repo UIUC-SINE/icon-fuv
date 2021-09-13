@@ -15,8 +15,7 @@ setup(
         "matplotlib",
         "netCDF4",
         "numpy",
-        "scipy",
-        "opencv-python"
+        "scipy"
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
