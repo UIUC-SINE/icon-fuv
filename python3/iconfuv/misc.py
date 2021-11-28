@@ -33,6 +33,34 @@ def profiler(l1, err=False, clean=False):
     profiles = np.swapaxes(profiles, 1, 2)
     return profiles
 
+def compensate_background(bright, altitudes,
+                         topside_alt=400,
+                         sublimb_alt=100):
+    '''
+    Background is estimated and corrected using topside alitudes.
+    Skip correction if brightness at topside are lower than in sublimb.
+    INPUTS:
+        bright         - Brightness vector [Rayleigh]
+        altitudes      - Tangent altitudes vector [km]
+        topside_alt    - topside altitude
+        sublimb_alt    - sublimb altitude
+    OUTPUT:
+        bright    - Brightness with background compesated
+    '''
+    #do not consider very low bright values
+    bright = np.where(bright<-200, np.nan, bright)
+
+    ind_topside = (altitudes > topside_alt)
+    ind_sublimb = (altitudes < sublimb_alt)
+
+    bgnd_topside = np.nanmedian(bright[ind_topside])
+    bgnd_sublimb = np.nanmedian(bright[ind_sublimb])
+    #Compesate background only if topside bgnd is lower than sublimb bgnd
+    if bgnd_topside < bgnd_sublimb:
+        bright -= bgnd_topside
+
+    return(bright)
+
 def get_oplus(l1=None, anc=None, epoch=100, stripe=3, bkgcor=False):
     raise RuntimeError('This function has been moved to airglow.misc')
 
@@ -247,11 +275,11 @@ def get_br(date='2020-01-03', epoch=300, stripe=None, v=3, r=0, size='full', swa
     l1.close()
     return br, br_err
 
-
-def get_br_nights(l1, anc=None):
+def get_br_nights(l1, anc=None, target_mode='night'):
+    target_mode = 2 if target_mode=='night' else 1
     mirror_dir = ['M9','M6','M3','P0','P3','P6']
     mode = l1.variables['ICON_L1_FUV_Mode'][:]
-    mode_night = (mode == 2).astype(np.int)
+    mode_night = (mode == target_mode).astype(np.int)
     if anc is not None:
         alt = anc.variables['ICON_ANCILLARY_FUVA_TANGENTPOINTS_LATLONALT'][:,:,:,2]
         ind = np.sum(alt<300, axis=1) - 1
@@ -260,7 +288,7 @@ def get_br_nights(l1, anc=None):
         sza300 = np.min(sza[xx,ind,yy], axis=1)
     nights = np.diff(mode_night, prepend=0)
     nights[nights==-1] = 0
-    idxs = np.where(mode==2)[0][:]
+    idxs = np.where(mode==target_mode)[0][:]
     nights = np.cumsum(nights)[idxs]
     brs = []
     brsc = []
@@ -290,7 +318,6 @@ def get_br_nights(l1, anc=None):
         return brs, brsc, szas, brs_err, mask_arr, nights, idxs
     else:
         return brs, brsc, brs_err, mask_arr, nights, idxs
-
 
 def shiftappend(im, w=[5,5]):
     ss, aa, bb = im.shape
@@ -326,7 +353,7 @@ def labeler(br):
     plt.tight_layout()
     while True:
         pt = np.rint(np.asarray(plt.ginput(10, timeout=0))).astype(np.int)
-        if pt.size is not 0:
+        if pt.size != 0:
             # pt = boxer(pt)
             br_masked[pt[:,1], pt[:,0]] = np.max(br_masked)
             mask[pt[:,1], pt[:,0]] = 1
