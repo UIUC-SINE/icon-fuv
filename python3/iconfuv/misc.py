@@ -277,14 +277,20 @@ def get_br(date='2020-01-03', epoch=300, stripe=None, v=3, r=0, size='full', swa
 
 def get_br_nights(l1, anc=None, target_mode='night'):
     target_mode = 2 if target_mode=='night' else 1
+    if 'ICON_L1_FUVB_CCD_TEMP' in list(l1.variables.keys()):
+        prefix = 'ICON_L1_FUVB_LWP'
+        channel = 'B'
+    else:
+        prefix = 'ICON_L1_FUVA_SWP'
+        channel = 'A'
     mirror_dir = ['M9','M6','M3','P0','P3','P6']
     mode = l1.variables['ICON_L1_FUV_Mode'][:]
     mode_night = (mode == target_mode).astype(np.int)
     if anc is not None:
-        alt = anc.variables['ICON_ANCILLARY_FUVA_TANGENTPOINTS_LATLONALT'][:,:,:,2]
+        alt = anc.variables[f'ICON_ANCILLARY_FUV{channel}_TANGENTPOINTS_LATLONALT'][:,:,:,2]
         ind = np.sum(alt<300, axis=1) - 1
         xx, yy = np.meshgrid(np.arange(alt.shape[0]), np.arange(6), indexing='ij')
-        sza = anc.variables['ICON_ANCILLARY_FUVA_TANGENTPOINTS_SZA'][:]
+        sza = anc.variables[f'ICON_ANCILLARY_FUV{channel}_TANGENTPOINTS_SZA'][:]
         sza300 = np.min(sza[xx,ind,yy], axis=1)
     nights = np.diff(mode_night, prepend=0)
     nights[nights==-1] = 0
@@ -302,9 +308,9 @@ def get_br_nights(l1, anc=None, target_mode='night'):
         br_err = np.zeros((6, len(night_ind), 256))
         mask = np.zeros_like(br, dtype=np.bool)
         for i in range(6):
-            tmp = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[i]][idxs[night_ind],:]
-            tmp2 = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_CLEAN' % mirror_dir[i]][idxs[night_ind],:]
-            br_err[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[i]][idxs[night_ind],:].filled(fill_value=0)
+            tmp = l1.variables[f'{prefix}_PROF_%s' % mirror_dir[i]][idxs[night_ind],:]
+            tmp2 = l1.variables[f'{prefix}_PROF_%s_CLEAN' % mirror_dir[i]][idxs[night_ind],:]
+            br_err[i] = l1.variables[f'{prefix}_PROF_%s_Error' % mirror_dir[i]][idxs[night_ind],:].filled(fill_value=0)
             mask[i] = tmp.mask
             br[i] = tmp.filled(fill_value=0)
             brc[i] = tmp2.filled(fill_value=0)
