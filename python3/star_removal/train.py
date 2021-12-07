@@ -1,9 +1,10 @@
 import torch
-import sys
+import sys, os, logging, time
 import torch.nn as nn
 from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import datetime
 
 from data_loader import BasicDataset
 from unet import UNet
@@ -22,7 +23,7 @@ def train_net(net,
     train_loss_over_epochs = []
     val_loss_over_epochs = []
 
-    for epoch in range(epochs):  # loop over the dataset multiple times
+    for epoch in tqdm(range(epochs)):  # loop over the dataset multiple times
 
         net.train()
         running_loss = 0.0
@@ -45,8 +46,7 @@ def train_net(net,
 
         # Normalizing the loss by the total number of train batches
         running_loss/=len(trainloader)*trainloader.batch_size
-        print('[%d] Train loss: %.3f' %
-              (epoch + 1, running_loss))
+        logging.info('[%d] Train loss: %.3f' % (epoch + 1, running_loss))
 
         net.eval()
         running_valloss = 0.0
@@ -62,8 +62,7 @@ def train_net(net,
                 running_valloss += loss.item()
 
         running_valloss/=len(valloader)*valloader.batch_size
-        print('Validation loss: %.3f' %
-              (running_valloss))
+        logging.info('Validation loss: %.3f' % (running_valloss))
 
         train_loss_over_epochs.append(running_loss)
         val_loss_over_epochs.append(running_valloss)
@@ -73,29 +72,51 @@ def train_net(net,
 # def main():
 if __name__ == '__main__':
     # ---------
+    NUM_FILT = 32
+    LR = 1e-3
+    EPOCHS = 30
+    RESIDUAL = True
+    BATCH_SIZE = 64
+    BILINEAR = True
+    OPTIMIZER = 'ADAM'
+    LOSS = 'MSE'
+
+    now = datetime.datetime.now().strftime('%Y_%m_%d__%H_%M_%S')
+    name = f'{now}_NF_{NUM_FILT}_LR_{LR}_EP_{EPOCHS}'
+    os.mkdir('saved/'+name)
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    logger.handlers = [] # clean up the previous handlers to avoid problems
+    fh = logging.FileHandler(f'saved/{name}/output.log')
+    formatter = logging.Formatter('%(asctime)s; %(message)s','%Y-%m-%d %H:%M:%S')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    logger.addHandler(logging.StreamHandler(sys.stdout))
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    logging.info(f'Using device {device}')
 
     trainset = BasicDataset(data_dir = './data/', fold='train')
     valset = BasicDataset(data_dir = './data/', fold='val')
-    trainloader = DataLoader(trainset, batch_size=32, shuffle=True)
+    trainloader = DataLoader(trainset, batch_size=BATCH_SIZE, shuffle=True)
     valloader = DataLoader(valset, batch_size=32, shuffle=False)
 
-    NUM_FILT = 8
-    LR = 1e-3
-    EPOCHS = 50
-    # Change here to adapt to your data
-    # n_channels=3 for RGB images
-    # n_classes is the number of probabilities you want to get per pixel
     net = UNet(in_channels=1,
                  out_channels=1,
                  start_filters=NUM_FILT,
-                 bilinear=True).to(device)
+                 bilinear=BILINEAR,
+                 residual=RESIDUAL).to(device)
 
-    # optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
-    optimizer = optim.Adam(net.parameters(), lr=LR)
-    criterion = nn.MSELoss()
+    if OPTIMIZER=='ADAM':
+        optimizer = optim.Adam(net.parameters(), lr=LR)
+    elif OPTIMIZER=='SGD':
+        optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+
+    if LOSS=='MSE':
+        criterion = nn.MSELoss()
 
     try:
+        t0 = time.time()
         trainloss, valloss = train_net(net=net,
                   device=device,
                   trainloader=trainloader,
@@ -104,28 +125,49 @@ if __name__ == '__main__':
                   optimizer=optimizer,
                   criterion=criterion
                   )
+        train_time = datetime.timedelta(seconds=int(time.time() - t0))
 
     except KeyboardInterrupt:
-        torch.save(net.state_dict(), 'INTERRUPTED.pth')
+        torch.save(net.state_dict(), f'saved/{name}/INTERRUPTED.pth')
         sys.exit(0)
 
-    torch.save(net.state_dict(), f'nf_{NUM_FILT}_LR_{LR}_EP_{EPOCHS}.pth')
+    torch.save(net.state_dict(), f'saved/{name}/nf_{NUM_FILT}_LR_{LR}_EP_{EPOCHS}.pth')
 
-    # Show results
-    x, y = next(iter(valloader))
-    x = x.to(device=device, dtype=torch.float)
-    y = y.to(device=device, dtype=torch.float)
-    with torch.no_grad():
-        out = net(x)
+    training_summary = [
+    '############## Network Parameters ############## \n',
+    f'Number of starting filters = {NUM_FILT} \n',
+    f'Residual Layer (subtract input from the last layer) = {RESIDUAL} \n',
+    f'Bilinear Interpolation for Upsampling (if False, use transposed \
+     convolution) = {BILINEAR} \n',
+    '\n############## Optimization Parameters ############## \n',
+    f'Optimizer = {OPTIMIZER} \n',
+    f'Loss = {LOSS} \n',
+    f'Learning Rate = {LR} \n',
+    f'Num Epochs = {EPOCHS} \n',
+    f'Training Batch Size = {BATCH_SIZE} \n',
+    '\n############## Data Parameters ############## \n',
+    f'Num of Tranining Images = {len(trainset)} \n',
+    f'Num of Validation Images = {len(valset)} \n',
+    '\n############## Results ############## \n',
+    'Final Validation Loss: {:.2f} \n'.format(valloss[-1]),
+    'Minimum Validation Loss: {:.2f} \n'.format(np.min(valloss)),
+    'Final Training Loss: {:.2f} \n'.format(trainloss[-1]),
+    'Minimum Training Loss: {:.2f} \n'.format(np.min(trainloss)),
+    f'Training Time: {str(train_time)} \n'
+    ]
 
-    i = 1
-    fig, ax = plt.subplots(1,3)
-    ax[0].imshow(x[i,0].cpu(), aspect='auto', origin='lower')
-    ax[0].set_title('Starry')
-    ax[1].imshow(y[i,0].cpu(), aspect='auto', origin='lower')
-    ax[1].set_title('Gold Standard')
-    ax[2].imshow(out[i,0].cpu(), aspect='auto', origin='lower')
-    ax[2].set_title('Predicted')
+    with open(f'saved/{name}/summary.txt', 'w') as file:
+        for line in training_summary:
+            file.write(line)
+
+
+    plt.figure()
+    plt.semilogy(trainloss, label='Training Loss')
+    plt.semilogy(valloss, label='Validation Loss')
+    plt.title('Convergence Plot')
+    plt.grid(which='both', axis='both')
+    plt.legend()
+    plt.savefig(f'saved/{name}/convergence_plot.png')
 
 # if __name__ == '__main__':
 #     main()
