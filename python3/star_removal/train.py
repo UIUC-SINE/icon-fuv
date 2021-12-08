@@ -17,7 +17,8 @@ def train_net(net,
               valloader,
               epochs,
               optimizer,
-              criterion
+              criterion,
+              path
 ):
 
     train_loss_over_epochs = []
@@ -50,6 +51,7 @@ def train_net(net,
 
         net.eval()
         running_valloss = 0.0
+        best_valloss = 1e6
         for i, data in enumerate(valloader):
             # get the inputs
             inputs = data[0].to(device=device, dtype=torch.float)
@@ -64,6 +66,10 @@ def train_net(net,
         running_valloss/=len(valloader)*valloader.batch_size
         logging.info('Validation loss: %.3f' % (running_valloss))
 
+        if running_valloss < best_valloss:
+            best_valloss = running_valloss
+            torch.save(net.state_dict(), f'saved/{name}/best_model.pth')
+
         train_loss_over_epochs.append(running_loss)
         val_loss_over_epochs.append(running_valloss)
 
@@ -73,13 +79,15 @@ def train_net(net,
 if __name__ == '__main__':
     # ---------
     NUM_FILT = 32
-    LR = 1e-3
-    EPOCHS = 30
+    LR = 0.5e-3
+    EPOCHS = 3
     RESIDUAL = True
     BATCH_SIZE = 64
     BILINEAR = True
     OPTIMIZER = 'ADAM'
     LOSS = 'MSE'
+    LOAD = True
+    loaded_model_path = 'saved/nf_32_LR_0.001_EP_15.pth'
 
     now = datetime.datetime.now().strftime('%Y_%m_%d__%H_%M_%S')
     name = f'{now}_NF_{NUM_FILT}_LR_{LR}_EP_{EPOCHS}'
@@ -99,13 +107,16 @@ if __name__ == '__main__':
     trainset = BasicDataset(data_dir = './data/', fold='train')
     valset = BasicDataset(data_dir = './data/', fold='val')
     trainloader = DataLoader(trainset, batch_size=BATCH_SIZE, shuffle=True)
-    valloader = DataLoader(valset, batch_size=32, shuffle=False)
+    valloader = DataLoader(valset, batch_size=32, shuffle=True)
 
     net = UNet(in_channels=1,
                  out_channels=1,
                  start_filters=NUM_FILT,
                  bilinear=BILINEAR,
                  residual=RESIDUAL).to(device)
+
+    if LOAD:
+        net.load_state_dict(torch.load(loaded_model_path))
 
     if OPTIMIZER=='ADAM':
         optimizer = optim.Adam(net.parameters(), lr=LR)
@@ -123,7 +134,8 @@ if __name__ == '__main__':
                   valloader=valloader,
                   epochs=EPOCHS,
                   optimizer=optimizer,
-                  criterion=criterion
+                  criterion=criterion,
+                  path=name
                   )
         train_time = datetime.timedelta(seconds=int(time.time() - t0))
 
