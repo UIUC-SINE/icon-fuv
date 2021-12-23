@@ -1,9 +1,11 @@
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
-import torch, glob, netCDF4
+import torch, glob, netCDF4, os
 from keras.models import load_model
 from keras import backend
 from iconfuv.misc import get_br_nights
+from iconfuv.artifact_removal2 import hot_pixel_correction, medfilt3d
 from unet import UNet
 
 def plot_profiles(net, valloader, i, shift_stripes=True):
@@ -59,93 +61,198 @@ def calculate_valloss(net, valloader, criterion):
         print('Validation loss: %.3f' % (running_valloss))
         return running_valloss
 
+def predictor(br, model, platform):
+    if platform=='torch':
+        with torch.no_grad():
+            return model(torch.from_numpy(br[:,None,:,:]).float().to(device))[:,0].cpu().numpy()
+    elif platform=='keras':
+        br2 = np.where(br>-50, br, -50)
+        return model.predict(br2[:,:,:,None])[:,:,:,0]
+
 if __name__ == '__main__':
-    channel = 'SW'
+    channel = 'LW'
     target_mode = 'day'
     nc_prefix = 'ICON_L1_FUV_SWP' if channel=='SW' else 'ICON_L1_FUV_LWP'
     orbit = 2
     stripe = 3
+    # matplotlib.rcParams['lines.linewidth'] = 0.3
 
-    model_keras = '/home/kamo/resources/icon-fuv/python3/scripts/cnn_model\
+    model_keras_new = '/home/kamo/resources/icon-fuv/python3/scripts/cnn_model\
 _SW_new_v5.4'
-#     model_keras = '/home/kamo/resources/icon-fuv/python3/scripts/cnn_model\
-# _SW_old_v5.4'
-    model_torch = '/home/kamo/resources/icon-fuv/python3/star_removal/saved\
-/2021_12_06__23_02_02_NF_32_LR_0.0005_EP_3/best_model.pth'
+    model_keras_old = '/home/kamo/resources/icon-fuv/python3/scripts/cnn_model\
+_SW_old_v5.4'
+    model_torch_new = '/home/kamo/resources/icon-fuv/python3/star_removal/saved\
+/2021_12_22__15_43_43_NF_32_LR_0.0005_EP_30_L1_LOSS/best_model.pth'
+    model_torch_base = '/home/kamo/resources/icon-fuv/python3/star_removal/saved\
+/2021_12_22__10_57_58_NF_32_LR_0.0005_EP_30/best_model.pth'
+    path_save = f'/home/kamo/resources/icon-fuv/python3/star_removal/saved\
+/2021_12_22__15_43_43_NF_32_LR_0.0005_EP_30_L1_LOSS/results/{channel}_{target_mode}/'
+    if not os.path.exists(path_save):
+        os.makedirs(path_save)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    net = UNet(in_channels=1,
+    net_base = UNet(in_channels=1,
                  out_channels=1,
                  start_filters=32,
                  bilinear=True,
                  residual=True).to(device)
 
+    net_new = UNet(in_channels=1,
+                 out_channels=1,
+                 start_filters=32,
+                 bilinear=True,
+                 residual=True).to(device)
 
-    net.load_state_dict(torch.load(model_torch))
-    net.eval()
+    net_base.load_state_dict(torch.load(model_torch_base))
+    net_new.load_state_dict(torch.load(model_torch_new))
+    net_base.eval()
+    net_new.eval()
 
-    model = load_model(model_keras)
+    model_old = load_model(model_keras_old)
+    model_new = load_model(model_keras_new)
 
-    date = [
+    model1 = { # displays on top right
+        'model'     : net_base,
+        'platform'  : 'torch',
+        'title'     : 'Unet Baseline'
+    }
+
+    model2 = { # displays on bottom right
+        'model'     : net_new,
+        'platform'  : 'torch',
+        'title'     : 'Unet New'
+    }
+
+    dates_day = [
     '2020-06-18',
-    # '2020-07-28',
-    # '2020-08-07',
-    # '2020-08-27',
-    # '2020-10-06',
-    # '2020-11-15',
-    # '2021-05-20'
+    '2020-07-28',
+    '2020-08-07',
+    '2020-08-27',
+    '2020-10-06',
+    '2020-11-15',
+    '2021-05-20'
     ]
+    dates_night = [
+    '2020-01-01',
+    '2020-06-18',
+    '2020-10-17',
+    '2021-03-16',
+    '2021-03-17',
+    '2021-03-18',
+    '2021-04-25'
+    ]
+    dates = dates_day if target_mode=='day' else dates_night
 
-    path_dir = '/home/kamo/resources/icon-fuv/ncfiles/l1/'
-    files = (glob.glob(path_dir+f'{nc_prefix}_{date[0]}*') +
-        glob.glob(path_dir+f'*/{nc_prefix}_{date[0]}*')) # for dset1 & dset2
-    files.sort()
-    file = files[-1]
-    l1 = netCDF4.Dataset(file, 'r')
+    for date in dates:
+        # for stripe in [0]:
+        for stripe in [0,3,5]:
+            path_dir = '/home/kamo/resources/icon-fuv/ncfiles/l1/'
+            files = (glob.glob(path_dir+f'{nc_prefix}_{date}_v0*') +
+                glob.glob(path_dir+f'*/{nc_prefix}_{date}_v0*')) # for dset1 & dset2
+            files.sort()
+            file = files[-1]
+            l1 = netCDF4.Dataset(file, 'r')
 
-    brs, brsc,_,_,_,_ = get_br_nights(l1, target_mode=target_mode)
-    l1.close()
+            brs, brsc,_,_,_,_ = get_br_nights(l1, target_mode=target_mode)
+            l1.close()
 
-    brs = np.concatenate(brs, axis=1)
-    brsc = np.concatenate(brsc, axis=1)
-    inds = np.linspace(0,len(brs[0]),5).astype(int)
-    ind = np.arange(inds[orbit], inds[orbit+1])
-    br = brs[:, ind].transpose(1,2,0)
-    brc = brsc[:, ind].transpose(1,2,0)
+            brs = np.concatenate(brs, axis=1)
+            brsc = np.concatenate(brsc, axis=1)
+            inds = np.linspace(0,len(brs[0]),5).astype(int)
+            ind = np.arange(inds[orbit], inds[orbit+1])
+            br = brs[:, ind]
+            brc = brsc[:, ind].transpose(1,2,0)
+            if target_mode=='night':
+                _, temp = medfilt3d(br, threshold=50, mode=2)
+                diff, _ = hot_pixel_correction(temp)
+                br -= diff[:,np.newaxis,:]
+            br = br.transpose(1,2,0)
 
-    br_keras = np.where(br>-50, br, -50)
-    br_keras = model.predict(br_keras[:,:,:,None])[:,:,:,0]
-    with torch.no_grad():
-        br_torch = net(torch.from_numpy(br[:,None,:,:]).float().to(device))[:,0].cpu()
+            cutter = lambda x,y: np.where(x>y,x,y)
 
-    plt.figure()
-    plt.imshow(np.log10(br[:,:,stripe].T+1e2),
-        aspect='auto', origin='lower', cmap='jet')
-    plt.title(f'Starry - {date[0]} , Orbs: {orbit}')
-    plt.colorbar()
-    plt.show()
+            br1 = predictor(br, model1['model'], model1['platform'])
+            br2 = predictor(br, model2['model'], model2['platform'])
 
-    plt.figure()
-    plt.imshow(np.log10(br_torch[:,:,stripe].T+1e2),
-        aspect='auto', origin='lower', cmap='jet')
-    plt.title(f'Torch - {date[0]} , Orbs: {orbit}')
-    plt.colorbar()
-    plt.show()
+            if target_mode=='night':
+                vmin=-5
+                vmax=np.max(br1[:,:,stripe])
+            else:
+                vmax = np.max(brc[:,:,stripe])
+                vmin = min(
+                    np.min(br[:,:,stripe]),
+                    np.min(brc[:,:,stripe]),
+                    np.min(br1[:,:,stripe]),
+                    np.min(br2[:,:,stripe]),
+                )
 
-    plt.figure()
-    plt.imshow(np.log10(br_keras[:,:,stripe].T+1e2),
-        aspect='auto', origin='lower', cmap='jet')
-    plt.title(f'Keras - {date[0]} , Orbs: {orbit}')
-    plt.colorbar()
-    plt.show()
+            f, ax =plt.subplots(2,2, figsize=(12.7,7.3))
+            plt.suptitle(f'{date} , Channel: {channel} , Stripe: {stripe}')
+            i1=ax[0,0].imshow(br[:,:,stripe].T,
+                aspect='auto', origin='lower', cmap='jet', vmax=vmax, vmin=vmin)
+            ax[0,0].set_title('Starry')
+            i2=ax[0,1].imshow(br1[:,:,stripe].T,
+                aspect='auto', origin='lower', cmap='jet', vmax=vmax, vmin=vmin)
+            ax[0,1].set_title(model1['title'])
+            i3=ax[1,0].imshow(brc[:,:,stripe].T,
+                aspect='auto', origin='lower', cmap='jet', vmax=vmax, vmin=vmin)
+            ax[1,0].set_title('Median Filter')
+            i4=ax[1,1].imshow(br2[:,:,stripe].T,
+                aspect='auto', origin='lower', cmap='jet', vmax=vmax, vmin=vmin)
+            ax[1,1].set_title(model2['title'])
+            plt.colorbar(i1, ax=ax[0,0])
+            plt.colorbar(i2, ax=ax[0,1])
+            plt.colorbar(i3, ax=ax[1,0])
+            plt.colorbar(i4, ax=ax[1,1])
+            # f.colorbar(im, ax=ax.ravel().tolist())
+            plt.tight_layout()
+            plt.savefig(path_save+f'{date}_ch_{channel}_st_{stripe}.png', dpi=250)
+            plt.close(f)
 
-    plt.figure()
-    plt.imshow(np.log10(brc[:,:,stripe].T+1e2),
-        aspect='auto', origin='lower', cmap='jet')
-    plt.title(f'Medfilt - {date[0]} , Orbs: {orbit}')
-    plt.colorbar()
-    plt.show()
+            f, ax =plt.subplots(2,2, figsize=(12.7,7.3))
+            plt.suptitle(f'{date} , Channel: {channel} , Stripe: {stripe}')
+            i1=ax[0,0].imshow(br[:,:,stripe].T,
+                aspect='auto', origin='lower', cmap='jet', vmax=vmax, vmin=vmin)
+            vmin=-20; vmax=10
+            ax[0,0].set_title('Starry')
+            i2=ax[0,1].imshow(-(br-br1)[:,:,stripe].T,
+                aspect='auto', origin='lower', cmap='jet', vmax=vmax, vmin=vmin)
+            ax[0,1].set_title('{} - Starry'.format(model1['title']))
+            i3=ax[1,0].imshow(-(br-brc)[:,:,stripe].T,
+                aspect='auto', origin='lower', cmap='jet', vmax=vmax, vmin=vmin)
+            ax[1,0].set_title('Median Filter - Starry')
+            i4=ax[1,1].imshow(-(br-br2)[:,:,stripe].T,
+                aspect='auto', origin='lower', cmap='jet', vmax=vmax, vmin=vmin)
+            ax[1,1].set_title('{} - Starry'.format(model2['title']))
+            plt.colorbar(i1, ax=ax[0,0])
+            plt.colorbar(i2, ax=ax[0,1])
+            plt.colorbar(i3, ax=ax[1,0])
+            plt.colorbar(i4, ax=ax[1,1])
+            # f.colorbar(im, ax=ax.ravel().tolist())
+            plt.tight_layout()
+            plt.savefig(path_save+f'{date}_ch_{channel}_st_{stripe}_diff_br.png', dpi=250)
+            plt.close(f)
 
+    # fig, ax = plt.subplots(1,2, sharey=True)
+    # i0=ax[0].imshow(np.log10(cutter(br[:,:,stripe].T,10)),
+    #     aspect='auto', origin='lower', cmap='jet', vmax=vmax, vmin=vmin)
+    # ax[0].axvline(date[1][0], color='m')
+    # ax[1].plot(br_torch[date[1][0],:,stripe],np.arange(256), label='unet')
+    # ax[1].plot(br[date[1][0],:,stripe],np.arange(256), label='raw')
+    # ax[1].legend()
+    # ax[1].grid(axis='both', which='both')
+    # fig.colorbar(i0, ax=ax[0])
+    # plt.savefig(path_save+'unet_1d.png', dpi=250)
+    # # plt.show()
+    #
+    # fig, ax = plt.subplots(1,2, sharey=True)
+    # i0=ax[0].imshow(np.log10(cutter(br[:,:,stripe].T,10)),
+    #     aspect='auto', origin='lower', cmap='jet', vmax=vmax, vmin=vmin)
+    # ax[0].axvline(date[1][0], color='m')
+    # ax[1].plot((br-br_torch)[date[1][0],:,stripe],np.arange(256), label='diff')
+    # ax[1].legend()
+    # ax[1].grid(axis='both', which='both')
+    # fig.colorbar(i0, ax=ax[0])
+    # plt.savefig(path_save+'unet_1d_diff.png', dpi=250)
 
     # plt.savefig(out_path+'/{}_orbs_{}.png'.format(date,i+1), dpi=150)

@@ -303,17 +303,17 @@ def get_br_nights(l1, anc=None, target_mode='night'):
     szas = []
     for night in np.unique(nights):
         night_ind = np.where(nights==night)[0]
-        br = np.zeros((6, len(night_ind), 256))
-        brc = np.zeros((6, len(night_ind), 256))
+        br = np.ma.zeros((6, len(night_ind), 256))
+        brc = np.ma.zeros((6, len(night_ind), 256))
         br_err = np.zeros((6, len(night_ind), 256))
         mask = np.zeros_like(br, dtype=np.bool)
         for i in range(6):
-            tmp = l1.variables[f'{prefix}_PROF_%s' % mirror_dir[i]][idxs[night_ind],:]
-            tmp2 = l1.variables[f'{prefix}_PROF_%s_CLEAN' % mirror_dir[i]][idxs[night_ind],:]
+            br[i] = l1.variables[f'{prefix}_PROF_%s' % mirror_dir[i]][idxs[night_ind],:]
+            brc[i] = l1.variables[f'{prefix}_PROF_%s_CLEAN' % mirror_dir[i]][idxs[night_ind],:]
             br_err[i] = l1.variables[f'{prefix}_PROF_%s_Error' % mirror_dir[i]][idxs[night_ind],:].filled(fill_value=0)
-            mask[i] = tmp.mask
-            br[i] = tmp.filled(fill_value=0)
-            brc[i] = tmp2.filled(fill_value=0)
+            mask[i] = br[i].mask
+        br = br_nan_filler(br, mode='median')
+        brc = br_nan_filler(brc, mode='median')
         if anc is not None:
             szas.append(sza300[idxs[night_ind]])
         brs.append(br)
@@ -324,6 +324,19 @@ def get_br_nights(l1, anc=None, target_mode='night'):
         return brs, brsc, szas, brs_err, mask_arr, nights, idxs
     else:
         return brs, brsc, brs_err, mask_arr, nights, idxs
+
+def br_nan_filler(br, mode='median'):
+    if mode=='median':
+        br_filled = br.copy()
+        filltop = np.nanmedian(br[:,:,:30], axis=(0,2))
+        fillbot = np.nanmedian(br[:,:,-30:], axis=(0,2))
+        br_filled[:,:,:30] = br[:,:,:30].filled(fill_value=filltop[None,:,None])
+        br_filled[:,:,-30:] = br[:,:,-30:].filled(fill_value=fillbot[None,:,None])
+        br_filled[:,:,30:-30] = br[:,:,30:-30].filled(fill_value=0)
+    elif mode=='zero':
+        br_filled = br.filled(fill_value=0)
+
+    return br_filled
 
 def shiftappend(im, w=[5,5]):
     ss, aa, bb = im.shape

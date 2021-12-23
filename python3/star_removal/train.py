@@ -80,17 +80,17 @@ if __name__ == '__main__':
     # ---------
     NUM_FILT = 32
     LR = 0.5e-3
-    EPOCHS = 3
+    EPOCHS = 30
     RESIDUAL = True
     BATCH_SIZE = 64
     BILINEAR = True
     OPTIMIZER = 'ADAM'
-    LOSS = 'MSE'
-    LOAD = True
+    LOSS = 'L1'
+    LOAD = False
     loaded_model_path = 'saved/nf_32_LR_0.001_EP_15.pth'
 
     now = datetime.datetime.now().strftime('%Y_%m_%d__%H_%M_%S')
-    name = f'{now}_NF_{NUM_FILT}_LR_{LR}_EP_{EPOCHS}'
+    name = f'{now}_NF_{NUM_FILT}_LR_{LR}_EP_{EPOCHS}_{LOSS}_LOSS'
     os.mkdir('saved/'+name)
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
@@ -125,6 +125,8 @@ if __name__ == '__main__':
 
     if LOSS=='MSE':
         criterion = nn.MSELoss()
+    elif LOSS=='L1':
+        criterion = nn.L1Loss()
 
     try:
         t0 = time.time()
@@ -149,8 +151,8 @@ if __name__ == '__main__':
     '############## Network Parameters ############## \n',
     f'Number of starting filters = {NUM_FILT} \n',
     f'Residual Layer (subtract input from the last layer) = {RESIDUAL} \n',
-    f'Bilinear Interpolation for Upsampling (if False, use transposed \
-     convolution) = {BILINEAR} \n',
+    'Bilinear Interpolation for Upsampling (if False, use transposed ',
+    f'convolution) = {BILINEAR} \n',
     '\n############## Optimization Parameters ############## \n',
     f'Optimizer = {OPTIMIZER} \n',
     f'Loss = {LOSS} \n',
@@ -166,6 +168,7 @@ if __name__ == '__main__':
     'Final Training Loss: {:.2f} \n'.format(trainloss[-1]),
     'Minimum Training Loss: {:.2f} \n'.format(np.min(trainloss)),
     f'Training Time: {str(train_time)} \n'
+    '\n############## Notes ############## \n',
     ]
 
     with open(f'saved/{name}/summary.txt', 'w') as file:

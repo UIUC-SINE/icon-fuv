@@ -31,7 +31,7 @@ class BasicDataset(Dataset):
         for file in self.files:
             data = np.load(file, allow_pickle=True).item()
             im_starry = data['image_stars']
-            im_clean = data['image_ori']
+            im_clean = data['image_clean']
             im_starry = np.where(np.isnan(im_starry), im_clean, im_starry)
             self.data.append((im_starry[np.newaxis], im_clean[np.newaxis]))
 
