@@ -1,7 +1,10 @@
-# Ulas Kamaci - 2022-01-12
-# artifact_removal_v2.0
+# Ulas Kamaci - 2022-02-01
+# artifact_removal_v2.1
 # Given a day of brightness profiles in Rayleighs, performs star removal and hot
 # pixel correction on the profiles. The star removal module is a neural network.
+# History:
+# v2.1: fix the torch.load() error due to using cpu instead of cuda by providing
+#       the map_location argument
 
 import numpy as np
 from scipy.ndimage import median_filter, convolve1d
@@ -339,14 +342,15 @@ def artifact_removal(profiles, channel, fuv_mode, path_to_networks):
     profiles = np.swapaxes(profiles, 1, 2)
 
     # initialize the neural networks
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     day_network_file = os.path.join(path_to_networks,'day_network_v1r0.pth')
     day_network = UNet(in_channels=1,
                  start_filters=32,
                  bilinear=True,
-                 residual=True)
+                 residual=True).to(device)
     night_network_file = os.path.join(path_to_networks,'night_network_v1r0')
 
-    day_network.load_state_dict(torch.load(day_network_file))
+    day_network.load_state_dict(torch.load(day_network_file, map_location=device))
     night_network = load_model(night_network_file)
     day_network.eval()
 
