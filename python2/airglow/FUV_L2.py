@@ -13,7 +13,7 @@ Todo:
 # These need to be manually changed, when necessary.
 # NOTE: When the major version is updated, you should change the History global attribute
 software_version_major = 4 # Should only be incremented on major changes
-software_version_minor = 1 # [0-99], increment on ALL published changes, resetting when the major version changes
+software_version_minor = 2 # [0-99], increment on ALL published changes, resetting when the major version changes
 software_version = float(software_version_major)+software_version_minor/1000.
 ####################################################################################################
 
@@ -1246,7 +1246,10 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
     ncfile.File_Date =                      t_file.strftime('%a, %d %b %Y, %Y-%m-%dT%H:%M:%S.%f')[:-3] + ' UTC'
     ncfile.Generated_By =                   'ICON SDC > ICON UIUC FUV L2.5 Processor v%.3f, J. J. Makela, D. Iliou' % software_version
     ncfile.Generation_Date =                t_file.strftime('%Y%m%d')
-    ncfile.setncattr_string('History',      ['FUV L2.5 Processor v4.01: Enable retrievals from the data with non-zero turret angles. Update the quality determination '
+    ncfile.setncattr_string('History',      ['FUV L2.5 Processor v4.02: Although there is no change in the L2.5 software, there has been significant updates in the FUV '
+                                            'Level-1 software such as updated calibrations and star removal software, that the data version of the L2.5 files are getting '
+                                            'upgraded to v5. This version provides more accurate altitude profiles, NmF2, and hmF2 estimates. U. Kamaci, 5 May 2022. \n'
+                                            'FUV L2.5 Processor v4.01: Enable retrievals from the data with non-zero turret angles. Update the quality determination '
                                             'algorithm to be more strict on low SNR retrievals. Filter out the brightness profiles with dayside contribution, which are '
                                             'labeled as nighttime. U. Kamaci, 23 Jul 2021. \n'
                                             'FUV L2.5 Processor v4.00: Flag the data affected by conjugate photoelectrons and adjust the qualities accordingly. '
@@ -1864,7 +1867,7 @@ def Get_lvl2_5_product(file_input = None,
         night_ind = []
         for ind, (mode, l1_qual) in enumerate(zip(FUV_mode, l1_quality)):
             # Check if we are in night mode
-            print('{}/{} - {}/{}'.format(stripe+1, 6, ind+1, len(FUV_mode)))
+            # print('{}/{} - {}/{}'.format(stripe+1, 6, ind+1, len(FUV_mode)))
             if mode==2:
                 try:
                     # We are in nighttime science mode, process the data

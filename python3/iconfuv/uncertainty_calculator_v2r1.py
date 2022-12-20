@@ -1,11 +1,11 @@
-# Ulas Kamaci - 2022-03-20
+# Ulas Kamaci - 2022-03-31
 # uncertainty_calculation v2.1
 # uncertainty_calculator is the main function where gain_calculator_day and
 # night are called within that.
 # History:
 # v2.0 - 2020-06-01
-# v2.1 - 2022-03-20: set gain_day to 1500 if it is calculated to be negative.
-# 1500 is roughly the mean value of gain_days in 2020.
+# v2.1 - 2022-03-31: In gain_day calculation, use background std calculated from
+# low intensity day indices instead of saa indices
 
 import numpy as np
 from scipy.signal import fftconvolve
@@ -41,11 +41,19 @@ def gain_calculator_day(signalday,background_std,profile_flatfield):
         int(0.9 * len(signalday_lp)) : int(0.99 * len(signalday_lp))
     ]
 
+    # find the indices corresponding to the smallest 10 percent of the low pass signal
+    # to characterize the background variance (more reliable than the saa data)
+    index_bkg = np.argsort(signalday_lp)[ : int(0.1 * len(signalday_lp))]
+
     # make sure these indices are larger than some small positive number, say 2
     index_p = np.where(signalday_lp[index1] > 2)[0]
 
     # update the indices with the positivity restriction
     index = index1[index_p]
+
+    # compute the background fluctuations by detrending the corresponding data
+    background_data = signalday[index_bkg] - signalday_lp[index_bkg]
+    background_data_var = np.std(background_data)**2
 
     # detrend the signal and normalize (not a complete normalization) such that
     # its sample variance is equal to the gain
@@ -57,7 +65,7 @@ def gain_calculator_day(signalday,background_std,profile_flatfield):
     # compute the background noise contribution to the sample variance of the
     # detrended_normalized array
     background_contributor = np.mean(
-        (background_std**2)[index] /
+        background_data_var /
         (abs(signalday_lp[index]) / profile_flatfield[index])
     )
 
@@ -228,8 +236,6 @@ def uncertainty_calculator(
         background_std[index_day],
         profile_flatfield[index_day]
     )
-    if gain_day <= 0:
-        gain_day = 1500
 
     signal_variance = background_std**2
     signal_variance[index_day] = (
@@ -255,7 +261,8 @@ def uncertainty_calculator(
 
         uncertainty_profile = np.sqrt(signal_variance + background_std**2)
         if calculated_background is True:
-            return uncertainty_profile, gain_day, gain_night, background_mean, background_std
+            return (uncertainty_profile, gain_day, gain_night, background_mean,
+                background_std, profile_flatfield, profile_ff, signal, signal_variance)
         else:
             return uncertainty_profile, gain_day, gain_night
 
