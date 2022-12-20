@@ -165,7 +165,7 @@ def tohban(l2=None, l1=None, anc=None, epoch=None, stripe=None):
     # axes[1].set_xticklabels(labels_x2)
     # axes[0].set_xticklabels(labels_x2)
 
-def tohban2(file_l2=None, png_stub=None, file_l1=None, stripe=None, max_ne=None, max_br=None):
+def tohban2(file_l2=None, png_stub=None, file_l1=None, stripe=None, max_ne=None, max_br=None, both_br=False):
     mirror_dir = ['M9','M6','M3','P0','P3','P6']
     l1 = netCDF4.Dataset(file_l1, mode='r')
     l2 = netCDF4.Dataset(file_l2, mode='r')
@@ -217,7 +217,8 @@ def tohban2(file_l2=None, png_stub=None, file_l1=None, stripe=None, max_ne=None,
             Ze = l2.variables['ICON_L25_O_Plus_Density_Error'][orbit_ind,:,stripe]
 
             mirror_dir = ['M9','M6','M3','P0','P3','P6']
-            br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_CLEAN' % mirror_dir[stripe]][idx,:]
+            br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[stripe]][idx,:]
+            brc = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_CLEAN' % mirror_dir[stripe]][idx,:]
             br_er = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[stripe]][idx,:]
 
             out = np.diff(X,axis=0)
@@ -226,10 +227,12 @@ def tohban2(file_l2=None, png_stub=None, file_l1=None, stripe=None, max_ne=None,
             Zem = np.ma.MaskedArray(Ze,mask)
 
             Bm = deepcopy(Zm) # brightness counterpart
+            Bmc = deepcopy(Zm) # brightness counterpart
             Bem = deepcopy(Zem) # brightness counterpart
             maskcounts = np.sum(Zm.mask==True, axis=1)
             for i in range(Bm.shape[0]):
                 Bm[i,maskcounts[i]:] = br[i][::-1][:Bm.shape[1]-maskcounts[i]]
+                Bmc[i,maskcounts[i]:] = brc[i][::-1][:Bm.shape[1]-maskcounts[i]]
                 Bem[i,maskcounts[i]:] = br_er[i][::-1][:Bm.shape[1]-maskcounts[i]]
 
             min_alt = Y.min()
@@ -250,20 +253,26 @@ def tohban2(file_l2=None, png_stub=None, file_l1=None, stripe=None, max_ne=None,
 
             # Brightness Plot
             # im1 = axes[0].pcolormesh(X,Y,Bm,vmin=None,vmax=None)
-            im1 = axes[0].pcolormesh(X,Y,Bm,vmin=None,vmax=max_br)
+            if both_br == True:
+                im1 = axes[0].pcolormesh(X,Y,Bm,vmin=None,vmax=max_br, cmap='jet')
+                im2 = axes[1].pcolormesh(X,Y,Bmc,vmin=None,vmax=max_br, cmap='jet')
+                axes[0].set_title('Raw Brightness Profiles; Stripe #%d \n %s (Orbits: %s)' % (stripe,dn[-1].strftime('%Y-%m-%d'), orbit_str))
+                axes[1].set_title('Star-removed Brightness Profiles')
+            else:
+                im1 = axes[0].pcolormesh(X,Y,Bmc,vmin=None,vmax=max_br)
+                im2 = axes[1].pcolormesh(X,Y,Bem,vmin=None,vmax=max_br)
+                axes[0].set_title('Star-Removed Brightness Profiles; Stripe #%d \n %s (Orbits: %s)' % (stripe,dn[-1].strftime('%Y-%m-%d'), orbit_str))
+                axes[1].set_title('Brightness Uncertainty Profiles')
             axes[0].xaxis.set_major_locator(mdates.MinuteLocator(interval=10))
             axes[0].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
             axes[0].set_ylim([min_alt,max_alt])
-            axes[0].set_title('Brightness Profile; Stripe #%d \n %s (Orbits: %s)' % (stripe,dn[-1].strftime('%Y-%m-%d'), orbit_str))
             axes[0].set_ylabel('Tangent Altitude [km]')
             # axes[0].set_xlim([min_dn,max_dn])
 
             # im2 = axes[1].pcolormesh(X,Y,Bem,vmin=None,vmax=None)
-            im2 = axes[1].pcolormesh(X,Y,Bem,vmin=None,vmax=None)
             axes[1].xaxis.set_major_locator(mdates.MinuteLocator(interval=10))
             axes[1].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
             axes[1].set_ylim([min_alt,max_alt])
-            axes[1].set_title('Brightness Error Profile')
             # axes[1].set_xlim([min_dn,max_dn])
             axes[1].set_ylabel('Tangent Altitude [km]')
 
@@ -346,7 +355,7 @@ def tohban2(file_l2=None, png_stub=None, file_l1=None, stripe=None, max_ne=None,
             axes[2].set_xticklabels(labels_x2)
             # axes[3].set_xticklabels(labels_x2)
 
-            fig.savefig(file_png, bbox_inches='tight')
+            fig.savefig(file_png, bbox_inches='tight') #, dpi=400)
             plt.close(fig)
 
         except:
