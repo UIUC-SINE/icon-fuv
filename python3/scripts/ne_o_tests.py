@@ -9,17 +9,24 @@ from airglow.FUV_L2 import get_msisGPI, create_cells_Matrix_spherical_symmetry
 path_dir = '/home/kamo/resources/iconfuv/nc_files/'
 
 # determine the parameters
-date = '2020-01-01'
-epoch = 550
+date = '2020-01-04'
+epoch = 610
 stripe = 2
 
 # read the files
 file_GPI = path_dir + 'ICON_Ancillary_GPI_2015-001-to-2020-132_v01r000.NC'
-file_anc = lastfile(path_dir+'l0/ICON_L0P_FUV_Ancillary_{}_v01r*'.format(date))
+file_anc = lastfile(path_dir+'l0/ICON_L0P_FUV_Ancillary_{}_v03r*'.format(date))
+file_l2 = lastfile('/home/kamo/resources/iconfuv/nc_files/l2/ICON_L2-5_FUV_Night_{}_v03r*'.format(date))
+file_l1 = lastfile(path_dir + 'l1/ICON_L1_FUV_SWP_{}_v03r*'.format(date))
+l2 = netCDF4.Dataset(file_l2, mode='r')
+l1 = netCDF4.Dataset(file_l1, mode='r')
 gpi = netCDF4.Dataset(file_GPI, mode='r')
 anc = netCDF4.Dataset(file_anc, mode='r')
 
 # set the variables
+mode = l1.variables['ICON_L1_FUV_Mode'][:]
+idx_night = np.where(mode==2)[0]
+epoch = idx_night[epoch]
 local_time = anc.variables['ICON_ANCILLARY_FUVA_TANGENTPOINTS_LST'][epoch, -1, stripe]
 print('Local Time: {}'.format(local_time))
 dn = parser.parse(anc.variables['ICON_ANCILLARY_FUV_TIME_UTC'][epoch])
@@ -33,7 +40,6 @@ if 'f107a' in gpi.variables.keys():
 else:
     print('Cannot find f107a in provided GPI file. Using daily f107 instead')
     f107a = gpi['f107d'][:]
-
 
 satlat = anc.variables['ICON_ANCILLARY_FUV_LATITUDE'][epoch]
 satlon = anc.variables['ICON_ANCILLARY_FUV_LONGITUDE'][epoch]
@@ -51,6 +57,9 @@ O_arr = np.zeros_like(alt_arr)
 Ne_arr = np.zeros_like(alt_arr)
 RR1_arr = np.zeros_like(alt_arr)
 RR2_arr = np.zeros_like(alt_arr)
+lt = anc.variables['ICON_ANCILLARY_FUVA_TANGENTPOINTS_LST'][epoch, -len(lat_arr), stripe]
+lt_h = int(lt)
+lt_m = int(60*(lt-lt_h))
 
 D = create_cells_Matrix_spherical_symmetry(ze[::-1],satalt)
 
@@ -79,10 +88,13 @@ br_calc = np.dot(D, RR1_arr[::-1])
 br_calc = br_calc[::-1]
 # %% plot
 plt.figure()
-plt.plot(Ne_arr, alt_arr, label='Ne profile')
-plt.plot(O_p_arr, alt_arr, label='O+ profile')
-plt.title('O+ vs Ne Comparison')
-plt.xlabel('Density [$cm^{-1}$]')
+plt.plot(Ne_arr, alt_arr, label='Ne')
+plt.plot(O_p_arr, alt_arr, label='[O+]')
+plt.plot(O_arr, alt_arr, label='[O]')
+plt.title('({:.0f}'.format(lat_arr[-1]) + u"\N{DEGREE SIGN}" +
+    'N, ' + '{:.0f}'.format(360-lon_arr[-1]) + u"\N{DEGREE SIGN}" + 'W)    ' +
+    dn.strftime("%x") + '     {:02d}:{:02d} LT'.format(lt_h,lt_m))
+plt.xlabel('Density ($cm^{-3}$)')
 plt.ylabel('Altitude [km]')
 plt.grid(which='both', axis='both')
 plt.legend()
