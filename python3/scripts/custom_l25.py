@@ -7,11 +7,11 @@ from dateutil import parser
 from datetime import timedelta
 from scipy.signal import medfilt
 
-date = '2020-01-20'
+date = '2020-08-30'
 data = True # True: use data, False: use simulation for brightness
 test = False # if True, artificially creates a hot pixel with high uncertainty
 median = False
-epoch = 58
+epoch = 225
 stripe = 3
 limb = 150.
 contribution ='RRMN'
@@ -19,13 +19,14 @@ reg_method = 'Tikhonov'
 weight_resid = False
 Spherical = True
 regu_order = 2
+reg_param = 2500.
 
 path_dir = '/home/kamo/resources/iconfuv/nc_files/'
 
-file_l1='../../nc_files/ICON_L1_FUV_SWP_{}_v02r000.NC'.format(date)
+file_l1 = path_dir + 'l1/ICON_L1_FUV_SWP_{}_v03r000.NC'.format(date)
 # file_l2='nc_files/ICON_L3_FUV_Oxygen-Profile-Night_{}_v01r000.NC'.format(date)
-file_anc='../../nc_files/ICON_L0P_FUV_Ancillary_{}_v01r000.NC'.format(date)
-file_GPI = '../../nc_files/ICON_Ancillary_GPI_2015-001-to-2020-044_v01r000.NC'
+file_anc = path_dir + 'l0/ICON_L0P_FUV_Ancillary_{}_v03r000.NC'.format(date)
+file_GPI = path_dir + 'ICON_Ancillary_GPI_2015-001-to-2020-326_v01r000.NC'
 
 anc = netCDF4.Dataset(file_anc, mode='r')
 l1 = netCDF4.Dataset(file_l1, mode='r')
@@ -34,8 +35,8 @@ gpi = netCDF4.Dataset(file_GPI, mode='r')
 
 mirror_dir = ['M9','M6','M3','P0','P3','P6']
 
-mode = anc.variables['ICON_ANCILLARY_FUV_ACTIVITY'][:]
-idx = np.where(mode==258)[0][epoch]
+mode = l1.variables['ICON_L1_FUV_Mode'][:]
+idx = np.where(mode==2)[0][epoch]
 dn = parser.parse(anc.variables['ICON_ANCILLARY_FUV_TIME_UTC'][idx])
 
 # Read the geophysical indeces
@@ -68,13 +69,16 @@ print('Orbit:{}'.format(anc.variables['ICON_ANCILLARY_FUV_ORBIT_NUMBER'][idx]))
 
 # Only consider values above the limb
 limb_i = np.where(np.squeeze(tanalts)>=limb)[0]
-br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[stripe]][idx,limb_i]
+br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_CLEAN' % mirror_dir[stripe]][idx,limb_i]
+br0 = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[stripe]][idx,limb_i]
 unmasked_ind = nan_checker(br)
 limb_i0 = limb_i[unmasked_ind]
 br = br[::-1]
+br0 = br0[::-1]
 unmasked_ind_f = nan_checker(br)
 limb_i = limb_i[unmasked_ind_f]
 br = br[unmasked_ind_f]
+br0 = br0[unmasked_ind_f]
 err = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[stripe]][idx,limb_i0]
 err = err[::-1]
 err[np.where(err<1e-1)] = 1 # set the error to 1 if it is 0
@@ -119,21 +123,27 @@ if data is False:
         br[-10] *= 20
         err[-10] *= 1e3
 
+# br2 = br.copy()
+# br2[70] = br[70] + 250
+# br2[70:100] = 0.7 * br[70:100]
+
 ver,Ne,h_centered,Sig_ver,Sig_Ne = FUV_Level_2_Density_Calculation(
     br,h,satlatlonalt,az,ze,
     Sig_Bright = np.diag(err**2), weight_resid=False,
     limb = limb,Spherical = Spherical, reg_method = reg_method,
     regu_order = regu_order, contribution =contribution,dn = dn,
-    f107=my_f107, f107a=my_f107a, f107p=my_f107p, apmsis=my_apmsis
+    f107=my_f107, f107a=my_f107a, f107p=my_f107p, apmsis=my_apmsis,
+    reg_param=reg_param
 )
 
-ver_w,Ne_w,h_centered,Sig_ver_w,Sig_Ne_w = FUV_Level_2_Density_Calculation(
-    br,h,satlatlonalt,az,ze,
-    Sig_Bright = np.diag(err**2), weight_resid=True,
-    limb = limb,Spherical = Spherical, reg_method = reg_method,
-    regu_order = regu_order, contribution =contribution,dn = dn,
-    f107=my_f107, f107a=my_f107a, f107p=my_f107p, apmsis=my_apmsis
-)
+# ver_w,Ne_w,h_centered,Sig_ver_w,Sig_Ne_w = FUV_Level_2_Density_Calculation(
+#     br2,h,satlatlonalt,az,ze,
+#     Sig_Bright = np.diag(err**2), weight_resid=False,
+#     limb = limb,Spherical = Spherical, reg_method = reg_method,
+#     regu_order = regu_order, contribution =contribution,dn = dn,
+#     f107=my_f107, f107a=my_f107a, f107p=my_f107p, apmsis=my_apmsis,
+#     reg_param=reg_param
+# )
 
 ne_true = np.zeros_like(Ne)
 for m in range(len(ne_true)):
@@ -147,35 +157,39 @@ for m in range(len(ne_true)):
     ne_true[m] = pt.ne
 
 hm,Nm,sig_hm,sig_Nm = find_hm_Nm_F2(Ne,h_centered,Sig_NE=Sig_Ne)
-hm_w,Nm_w,sig_hm_w,sig_Nm_w = find_hm_Nm_F2(Ne_w,h_centered,Sig_NE=Sig_Ne_w)
+# hm_w,Nm_w,sig_hm_w,sig_Nm_w = find_hm_Nm_F2(Ne_w,h_centered,Sig_NE=Sig_Ne_w)
 
 plt.figure()
-plt.plot(Ne, h_centered, label='Unwhitened')
+plt.plot(Ne, h_centered, label='Normal')
 plt.plot(Nm, hm, 'bo')
-plt.plot(Ne_w, h_centered, label='Whitened')
-plt.plot(Nm_w, hm_w, 'ro')
-plt.plot(ne_true, h_centered, label='True')
+# plt.plot(Ne_w, h_centered, label='Adjusted')
+# plt.plot(Nm_w, hm_w, 'ro')
+# plt.plot(ne_true, h_centered, label='True')
 plt.ticklabel_format(style='sci', axis='x', scilimits=(0,2))
-plt.title('Data Retrieved O$^+$ Whitening Comparison')
+plt.title('Retrieved O$^+$ Comparison')
 plt.xlabel('$O^+$ Density [$cm^{-3}$]')
 plt.ylabel('Altitude [km]')
+plt.grid(which='both', axis='both')
 plt.legend()
 
-plt.figure()
-plt.plot(np.diag(Sig_Ne), h_centered, label='Unwhitened')
-plt.plot(np.diag(Sig_Ne_w), h_centered, label='Whitened')
-plt.ticklabel_format(style='sci', axis='x', scilimits=(0,2))
-plt.title('Data Retrieved Ne Uncertainty Whitening Comparison')
-plt.xlabel('VER Uncertainty [$cm^{-3}$]')
-plt.ylabel('Altitude [km]')
-plt.legend()
+# plt.figure()
+# plt.plot(np.diag(Sig_Ne), h_centered, label='Unwhitened')
+# plt.plot(np.diag(Sig_Ne_w), h_centered, label='Whitened')
+# plt.ticklabel_format(style='sci', axis='x', scilimits=(0,2))
+# plt.title('Data Retrieved Ne Uncertainty Whitening Comparison')
+# plt.xlabel('VER Uncertainty [$cm^{-3}$]')
+# plt.ylabel('Altitude [km]')
+# plt.legend()
 
 plt.figure()
-plt.plot(br, h, label='Brightness')
-plt.plot(err, h, label='Error')
+plt.plot(br, h, label='Brightness Clean')
+plt.plot(br0, h, label='Brightness Raw')
+plt.legend()
+# plt.plot(err, h, label='Error')
 # plt.plot(br_nn, h, label='No Noise')
-plt.ticklabel_format(style='sci', axis='x', scilimits=(0,2))
+plt.ticklabel_format(style='sci', axis='x', scilimits=(0,3))
 plt.title('Simulated Brightness' if data is False else 'Brightness')
 plt.xlabel('135.6 nm Brightness [R]')
 plt.ylabel('Tangent Altitudes [km]')
+plt.grid(which='both', axis='both')
 plt.show()
