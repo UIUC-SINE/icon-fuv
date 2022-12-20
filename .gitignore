@@ -5,6 +5,8 @@
 *.JPG
 *.NC
 *.nc
+*.npy
+*.zip
 **/models
 **/*.txt
 **/destarring_dataset

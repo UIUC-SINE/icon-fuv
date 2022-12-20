@@ -16,7 +16,11 @@ setup(
         "netCDF4",
         "numpy",
         "scipy",
-        "opencv-python"
+        "apexpy",
+        "astral",
+        "ephem",
+        "scikit-image",
+        "pandas"
     ],
     classifiers=[
         "Programming Language :: Python :: 2",
