@@ -1,11 +1,9 @@
-# Ulas Kamaci - 2022-03-20
-# uncertainty_calculation v2.1
+# Ulas Kamaci - 2020-06-01
+# uncertainty_calculation v2.0
 # uncertainty_calculator is the main function where gain_calculator_day and
 # night are called within that.
 # History:
 # v2.0 - 2020-06-01
-# v2.1 - 2022-03-20: set gain_day to 1500 if it is calculated to be negative.
-# 1500 is roughly the mean value of gain_days in 2020.
 
 import numpy as np
 from scipy.signal import fftconvolve
@@ -228,8 +226,6 @@ def uncertainty_calculator(
         background_std[index_day],
         profile_flatfield[index_day]
     )
-    if gain_day <= 0:
-        gain_day = 1500
 
     signal_variance = background_std**2
     signal_variance[index_day] = (

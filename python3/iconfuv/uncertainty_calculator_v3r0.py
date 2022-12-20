@@ -1,39 +1,55 @@
-# Ulas Kamaci - 2022-03-20
-# uncertainty_calculation v2.1
+# Ulas Kamaci - 2022-04-02
+# uncertainty_calculation v3.0
 # uncertainty_calculator is the main function where gain_calculator_day and
 # night are called within that.
 # History:
 # v2.0 - 2020-06-01
-# v2.1 - 2022-03-20: set gain_day to 1500 if it is calculated to be negative.
-# 1500 is roughly the mean value of gain_days in 2020.
+# v3.0 - 2022-04-02: In gain_day calculation, use background std calculated from
+# low intensity day indices instead of saa indices. Set the minimum flatfield
+# counts to 100. Correct the outlier pixels in the calculated background
+# standard deviations from saa data. Add new outlier elimination steps in the
+# gain calculations. Ulas Kamaci.
 
 import numpy as np
-from scipy.signal import fftconvolve
-from scipy.ndimage import median_filter
+from scipy.signal import convolve2d
+from scipy.ndimage import median_filter, convolve1d
 
-def gain_calculator_day(signalday,background_std,profile_flatfield):
+def gain_calculator_day(signalday,profile_flatfield):
     """
     Computes the average daytime gain from one day of daytime data.
 
     Args:
         signalday (ndarray): array of daytime flatfielded profiles
-        background_std (ndarray): array of background standard deviation
-            profiles (same dimension as signalday)
         profile_flatfield (ndarray): array of flatfielding coefficients for
             the science pixels
 
     Returns:
         gain_day (float): computed gain value
     """
+    # eliminate pixels and epochs containing values < -200 for >50% of time
+    # along the other dimension
+    indbl = np.where(signalday < -200)
+    ind0i, ct0 = np.unique(indbl[0], return_counts=True)
+    ind1i, ct1 = np.unique(indbl[1], return_counts=True)
+    ind0o = ind0i[ct0>signalday.shape[1]*0.5]
+    ind1o = ind1i[ct1>signalday.shape[0]*0.5]
+    indx = np.array(list(set(np.arange(signalday.shape[0])) - set(ind0o)))
+    indy = np.array(list(set(np.arange(signalday.shape[1])) - set(ind1o)))
+    signalday1 = signalday[indx[:,np.newaxis], indy[np.newaxis,:]]
+    profile_flatfield = profile_flatfield[indx[:,np.newaxis], indy[np.newaxis,:]]
     # low pass filter dayside along the epoch dimension
     # this will be used as the mean of the signal
-    signalday_lp = fftconvolve(signalday, 0.1*np.ones((10,1)), mode='same')
+    signalday_lp = convolve2d(signalday1, 0.1*np.ones((10,1)), mode='same', boundary='symm')
 
     # transform all the 2d arrays into 1d arrays
-    signalday = signalday.flatten()
+    signalday = signalday1.flatten()
     signalday_lp = signalday_lp.flatten()
-    background_std = background_std.flatten()
     profile_flatfield = profile_flatfield.flatten()
+    # make sure using signal larger than -200
+    index_p2 = np.where(signalday > -200)[0]
+    signalday = signalday[index_p2]
+    signalday_lp = signalday_lp[index_p2]
+    profile_flatfield = profile_flatfield[index_p2]
 
     # find the indices corresponding to the top 10 percent of the low pass signal
     # (excluding the top 1 percent since there might be outliers)
@@ -41,11 +57,19 @@ def gain_calculator_day(signalday,background_std,profile_flatfield):
         int(0.9 * len(signalday_lp)) : int(0.99 * len(signalday_lp))
     ]
 
-    # make sure these indices are larger than some small positive number, say 2
+    # find the indices corresponding to the smallest 10 percent of the low pass signal
+    # to characterize the background variance (more reliable than the saa data)
+    index_bkg = np.argsort(signalday_lp)[ : int(0.1 * len(signalday_lp))]
+
+    # make sure signal indices are larger than some small positive number, say 2
     index_p = np.where(signalday_lp[index1] > 2)[0]
 
-    # update the indices with the positivity restriction
+    # update the indices
     index = index1[index_p]
+
+    # compute the background fluctuations by detrending the corresponding data
+    background_data = signalday[index_bkg] - signalday_lp[index_bkg]
+    background_data_var = np.std(background_data)**2
 
     # detrend the signal and normalize (not a complete normalization) such that
     # its sample variance is equal to the gain
@@ -57,7 +81,7 @@ def gain_calculator_day(signalday,background_std,profile_flatfield):
     # compute the background noise contribution to the sample variance of the
     # detrended_normalized array
     background_contributor = np.mean(
-        (background_std**2)[index] /
+        background_data_var /
         (abs(signalday_lp[index]) / profile_flatfield[index])
     )
 
@@ -81,6 +105,17 @@ def gain_calculator_night(signalnight,profile_flatfield):
     ind_nonzero = np.where(profile_flatfield[sigind[0]]!=1)[0]
     br = signalnight[sigind[:,np.newaxis], ind_nonzero[np.newaxis,:]]
 
+    # eliminate pixels and epochs containing values < -200 for >50% of time
+    # along the other dimension
+    indbl = np.where(br < -200)
+    ind0i, ct0 = np.unique(indbl[0], return_counts=True)
+    ind1i, ct1 = np.unique(indbl[1], return_counts=True)
+    ind0o = ind0i[ct0>br.shape[1]*0.5]
+    ind1o = ind1i[ct1>br.shape[0]*0.5]
+    indx = np.array(list(set(np.arange(br.shape[0])) - set(ind0o)))
+    indy = np.array(list(set(np.arange(br.shape[1])) - set(ind1o)))
+    br = br[indx[:,np.newaxis], indy[np.newaxis,:]]
+
     # run outlier elimination to get rid of the bad data
     br_med = median_filter(br, size=(1,15))
     br_diff = br - br_med
@@ -88,16 +123,32 @@ def gain_calculator_night(signalnight,profile_flatfield):
     br_filt = br.copy()
     br_filt[filt==1] = br_med[filt==1]
 
+    # run a more extreme outlier elimination with larger threshold and bigger window
+    br_med0 = median_filter(br, size=(1,40))
+    br_diff0 = br - br_med0
+    filt0 = abs(br_diff0) > 200
+    br_filt[filt0==1] = br_med0[filt0==1]
+
+    # run hot pixel correction
+    brfiltmean = np.mean(br_filt, axis=0)
+    diff = brfiltmean - convolve1d(brfiltmean, 0.05*np.ones(20), mode='reflect')
+    br_filt = br_filt - diff
+
     # low pass filter nightside along the altitude dimension
     # this will be used as the mean of the signal
-    signalnight_lp = fftconvolve(br_filt, 0.1*np.ones((1,10)), mode='same')
+    signalnight_lp = convolve2d(br_filt, 0.1*np.ones((1,10)), mode='same', boundary='symm')
 
     # transform all the 2d arrays into 1d arrays
     signalnight = br_filt.flatten()
     signalnight_lp = signalnight_lp.flatten()
     profile_flatfield = profile_flatfield[
         sigind[:,np.newaxis], ind_nonzero[np.newaxis,:]
-    ].flatten()
+    ][indx[:,np.newaxis], indy[np.newaxis,:]].flatten()
+    # make sure using signal larger than -200
+    index_p2 = np.where(signalnight > -200)[0]
+    signalnight = signalnight[index_p2]
+    signalnight_lp = signalnight_lp[index_p2]
+    profile_flatfield = profile_flatfield[index_p2]
 
     # find the indices corresponding to the smallest 10 percent of the low pass signal
     # to characterize the background variance (more reliable than the saa data)
@@ -184,8 +235,8 @@ def uncertainty_calculator(
     profile_flatfield[np.isnan(profile_flatfield)] = 0
     profile_raw[np.isnan(profile_raw)] = 0
 
-    # set the small values to 1 to prevent division errors
-    profile_flatfield[profile_flatfield < 1] = 1
+    # set the small values to 100 to prevent division errors
+    profile_flatfield[profile_flatfield < 100] = 100
 
     # perform flatfielding
     profile_ff = profile_raw / profile_flatfield
@@ -210,6 +261,15 @@ def uncertainty_calculator(
         background_mean_altitude = np.median(background_saa, axis=0)
         background_std_altitude = np.std(background_saa, axis=0)
 
+        # perform median filter based outlier detection to correct the standard
+        # deviation for constant pixels
+        bkgmed_mean = median_filter(background_mean_altitude, size=50)
+        bkgmed_std = median_filter(background_std_altitude, size=50)
+        indzero = np.where((bkgmed_mean-background_mean_altitude)/abs(bkgmed_mean) > 0.8)[0]
+        indnonzero = np.where((bkgmed_mean-background_mean_altitude)/abs(bkgmed_mean) <= 0.8)[0]
+
+        background_std_altitude[indzero] = bkgmed_std[indzero]
+
         # replicate the mean and the deviation along the time axis (since we assume
         # they don't change over time)
         background_mean = np.repeat(
@@ -224,12 +284,9 @@ def uncertainty_calculator(
 
     # compute the gain for the day
     gain_day = gain_calculator_day(
-        signal[index_day],
-        background_std[index_day],
-        profile_flatfield[index_day]
+        signal[index_day[:,np.newaxis], indnonzero[np.newaxis,:]],
+        profile_flatfield[index_day[:,np.newaxis], indnonzero[np.newaxis,:]]
     )
-    if gain_day <= 0:
-        gain_day = 1500
 
     signal_variance = background_std**2
     signal_variance[index_day] = (
@@ -239,9 +296,12 @@ def uncertainty_calculator(
 
     if index_night is not None:
         # compute the gain for the night
+        if len(indnonzero)>200:
+            # eliminate the top and bottom 50 pixels since sometimes cause problems
+            indnonzero = indnonzero[50:-50]
         gain_night = gain_calculator_night(
-            signal[index_night],
-            profile_flatfield[index_night]
+            signal[index_night[:,np.newaxis], indnonzero[np.newaxis,:]],
+            profile_flatfield[index_night[:,np.newaxis], indnonzero[np.newaxis,:]]
         )
 
         # make sure that the calculated night gain is larger than day (because
