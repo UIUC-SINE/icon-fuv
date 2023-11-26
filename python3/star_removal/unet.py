@@ -1,13 +1,14 @@
 """ Full assembly of the parts to form the complete network """
 
-from unet_parts import *
+import torch
+import torch.nn as nn
+from star_removal.unet_parts import DoubleConv,Up,Down,OutConv
 
 
 class UNet(nn.Module):
-    def __init__(self, in_channels, out_channels, start_filters, bilinear=True, residual=True):
+    def __init__(self, in_channels, start_filters, bilinear=True, residual=True):
         super(UNet, self).__init__()
         self.in_channels = in_channels
-        self.out_channels = out_channels
         self.bilinear = bilinear
         self.residual = residual
         sf = start_filters
@@ -22,7 +23,8 @@ class UNet(nn.Module):
         self.up2 = Up(sf*8, sf*4 // factor, (2,2), bilinear)
         self.up3 = Up(sf*4, sf*2 // factor, (2,1), bilinear)
         self.up4 = Up(sf*2, sf, (2,1), bilinear)
-        self.outc = OutConv(sf, out_channels)
+        # self.outc = nn.Conv2d(sf, 1, kernel_size=1)
+        self.outc = OutConv(sf, 1)
 
     def forward(self, x0):
         x1 = self.inc(x0)

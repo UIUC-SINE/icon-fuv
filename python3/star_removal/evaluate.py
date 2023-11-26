@@ -6,7 +6,7 @@ from keras.models import load_model
 from keras import backend
 from iconfuv.misc import get_br_nights
 from iconfuv.artifact_removal2 import hot_pixel_correction, medfilt3d
-from unet import UNet
+from star_removal.unet import UNet
 
 def plot_profiles(net, valloader, i, shift_stripes=True):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -41,6 +41,22 @@ def plot_profiles(net, valloader, i, shift_stripes=True):
     ax[1,3].set_title('Diff')
     plt.show()
 
+def plot_dataset_diff(x,y,th1=10,bs=512):
+    if type(x)!=np.ndarray:
+        x=x.cpu()
+        y=y.cpu()
+    f=plt.gcf()
+    plt.close(f)
+    fig, ax = plt.subplots(1,3, figsize=(14,5))
+    i = np.random.randint(bs)
+    i1 = ax[0].imshow((x[i,0]-y[i,0]), aspect='auto', origin='lower', cmap='jet', vmax=th1)
+    i2 = ax[1].imshow(np.log10((x[i,0]-y[i,0])+10), aspect='auto', origin='lower', cmap='jet')
+    ax[2].plot((x[i,0]-y[i,0]), np.arange(256))
+    ax[2].set_xlim([-2,22])
+    plt.colorbar(i1, ax=ax[0])
+    plt.colorbar(i2, ax=ax[1])
+    plt.show()
+
 
 def calculate_valloss(net, valloader, criterion):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -70,7 +86,7 @@ def predictor(br, model, platform):
         return model.predict(br2[:,:,:,None])[:,:,:,0]
 
 if __name__ == '__main__':
-    channel = 'LW'
+    channel = 'SW'
     target_mode = 'day'
     nc_prefix = 'ICON_L1_FUV_SWP' if channel=='SW' else 'ICON_L1_FUV_LWP'
     orbit = 2
@@ -82,24 +98,22 @@ _SW_new_v5.4'
     model_keras_old = '/home/kamo/resources/icon-fuv/python3/scripts/cnn_model\
 _SW_old_v5.4'
     model_torch_new = '/home/kamo/resources/icon-fuv/python3/star_removal/saved\
-/2021_12_22__15_43_43_NF_32_LR_0.0005_EP_30_L1_LOSS/best_model.pth'
+/2021_12_23__14_47_24_NF_32_LR_0.0005_EP_30_L1_LOSS/best_model.pth'
     model_torch_base = '/home/kamo/resources/icon-fuv/python3/star_removal/saved\
-/2021_12_22__10_57_58_NF_32_LR_0.0005_EP_30/best_model.pth'
+/2021_12_22__15_43_43_NF_32_LR_0.0005_EP_30_L1_LOSS/best_model.pth'
     path_save = f'/home/kamo/resources/icon-fuv/python3/star_removal/saved\
-/2021_12_22__15_43_43_NF_32_LR_0.0005_EP_30_L1_LOSS/results/{channel}_{target_mode}/'
+/2021_12_23__14_47_24_NF_32_LR_0.0005_EP_30_L1_LOSS/results/{channel}_{target_mode}/'
     if not os.path.exists(path_save):
         os.makedirs(path_save)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     net_base = UNet(in_channels=1,
-                 out_channels=1,
                  start_filters=32,
                  bilinear=True,
                  residual=True).to(device)
 
     net_new = UNet(in_channels=1,
-                 out_channels=1,
                  start_filters=32,
                  bilinear=True,
                  residual=True).to(device)
@@ -113,15 +127,15 @@ _SW_old_v5.4'
     model_new = load_model(model_keras_new)
 
     model1 = { # displays on top right
-        'model'     : net_base,
-        'platform'  : 'torch',
-        'title'     : 'Unet Baseline'
-    }
-
-    model2 = { # displays on bottom right
         'model'     : net_new,
         'platform'  : 'torch',
         'title'     : 'Unet New'
+    }
+
+    model2 = { # displays on bottom right
+        'model'     : net_base,
+        'platform'  : 'torch',
+        'title'     : 'Unet Base'
     }
 
     dates_day = [
@@ -250,8 +264,8 @@ _SW_old_v5.4'
     #     aspect='auto', origin='lower', cmap='jet', vmax=vmax, vmin=vmin)
     # ax[0].axvline(date[1][0], color='m')
     # ax[1].plot((br-br_torch)[date[1][0],:,stripe],np.arange(256), label='diff')
-    # ax[1].legend()
     # ax[1].grid(axis='both', which='both')
+    # ax[1].legend()
     # fig.colorbar(i0, ax=ax[0])
     # plt.savefig(path_save+'unet_1d_diff.png', dpi=250)
 

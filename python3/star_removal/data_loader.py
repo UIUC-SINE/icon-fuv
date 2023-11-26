@@ -50,6 +50,11 @@ class BasicDataset(Dataset):
         if self.target_transform is not None:
             im_clean = self.target_transform(im_clean)
 
+        if np.random.uniform()<0.5:
+            stars = im_starry - im_clean
+            im_clean = 4*im_clean
+            im_starry = im_clean + stars
+
         return im_starry, im_clean
 
 def data_rewrite(file):

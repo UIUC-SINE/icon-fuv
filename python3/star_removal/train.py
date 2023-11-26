@@ -3,6 +3,8 @@ import sys, os, logging, time
 import torch.nn as nn
 from torch import optim
 from torch.utils.data import DataLoader
+import torch.nn.functional as F
+from dice_score import dice_loss
 from tqdm import tqdm
 import datetime
 
@@ -78,9 +80,9 @@ def train_net(net,
 # def main():
 if __name__ == '__main__':
     # ---------
-    NUM_FILT = 32
-    LR = 0.5e-3
-    EPOCHS = 30
+    NUM_FILT = 16
+    LR = 1e-3
+    EPOCHS = 10
     RESIDUAL = True
     BATCH_SIZE = 64
     BILINEAR = True
@@ -110,7 +112,6 @@ if __name__ == '__main__':
     valloader = DataLoader(valset, batch_size=32, shuffle=True)
 
     net = UNet(in_channels=1,
-                 out_channels=1,
                  start_filters=NUM_FILT,
                  bilinear=BILINEAR,
                  residual=RESIDUAL).to(device)
@@ -127,6 +128,27 @@ if __name__ == '__main__':
         criterion = nn.MSELoss()
     elif LOSS=='L1':
         criterion = nn.L1Loss()
+
+    training_summary = [
+    '############## Network Parameters ############## \n',
+    f'Number of starting filters = {NUM_FILT} \n',
+    f'Residual Layer (subtract input from the last layer) = {RESIDUAL} \n',
+    'Bilinear Interpolation for Upsampling (if False, use transposed ',
+    f'convolution) = {BILINEAR} \n',
+    '\n############## Optimization Parameters ############## \n',
+    f'Optimizer = {OPTIMIZER} \n',
+    f'Loss = {LOSS} \n',
+    f'Learning Rate = {LR} \n',
+    f'Num Epochs = {EPOCHS} \n',
+    f'Training Batch Size = {BATCH_SIZE} \n',
+    '\n############## Data Parameters ############## \n',
+    f'Num of Tranining Images = {len(trainset)} \n',
+    f'Num of Validation Images = {len(valset)} \n',
+    ]
+
+    with open(f'saved/{name}/summary.txt', 'w') as file:
+        for line in training_summary:
+            file.write(line)
 
     try:
         t0 = time.time()
@@ -148,20 +170,6 @@ if __name__ == '__main__':
     torch.save(net.state_dict(), f'saved/{name}/nf_{NUM_FILT}_LR_{LR}_EP_{EPOCHS}.pth')
 
     training_summary = [
-    '############## Network Parameters ############## \n',
-    f'Number of starting filters = {NUM_FILT} \n',
-    f'Residual Layer (subtract input from the last layer) = {RESIDUAL} \n',
-    'Bilinear Interpolation for Upsampling (if False, use transposed ',
-    f'convolution) = {BILINEAR} \n',
-    '\n############## Optimization Parameters ############## \n',
-    f'Optimizer = {OPTIMIZER} \n',
-    f'Loss = {LOSS} \n',
-    f'Learning Rate = {LR} \n',
-    f'Num Epochs = {EPOCHS} \n',
-    f'Training Batch Size = {BATCH_SIZE} \n',
-    '\n############## Data Parameters ############## \n',
-    f'Num of Tranining Images = {len(trainset)} \n',
-    f'Num of Validation Images = {len(valset)} \n',
     '\n############## Results ############## \n',
     'Final Validation Loss: {:.2f} \n'.format(valloss[-1]),
     'Minimum Validation Loss: {:.2f} \n'.format(np.min(valloss)),
@@ -183,6 +191,7 @@ if __name__ == '__main__':
     plt.grid(which='both', axis='both')
     plt.legend()
     plt.savefig(f'saved/{name}/convergence_plot.png')
+    plt.close()
 
 # if __name__ == '__main__':
 #     main()
