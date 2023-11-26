@@ -15,7 +15,9 @@ setup(
         "matplotlib",
         "netCDF4",
         "numpy",
-        "scipy"
+        "scipy",
+        "scikit-image",
+        "pandas"
     ],
     classifiers=[
         "Programming Language :: Python :: 3",

@@ -2,7 +2,9 @@ import os, glob, netCDF4, pyglow
 from airglow.FUV_L2 import get_msisGPI, FUV_Level_2_Density_Calculation, find_hm_Nm_F2, nan_checker
 import airglow.ICON_FUV_fwd_model as FUV_F # for simulating data
 import numpy as np
+from dateutil import parser
 
+path_dir = '/home/kamo/resources/icon-fuv/ncfiles/'
 
 def get_oplus(l1=None, anc=None, epoch=100, stripe=3, bkgcor=False):
     limb = 150.
@@ -13,7 +15,7 @@ def get_oplus(l1=None, anc=None, epoch=100, stripe=3, bkgcor=False):
     regu_order = 2
     reg_param = 2500.
 
-    file_GPI = path_dir + 'ICON_Ancillary_GPI_2015-001-to-2020-187_v01r000.NC'
+    file_GPI = path_dir + 'ICON_Ancillary_GPI_2015-001-to-2023-011_v01r000.NC'
     gpi = netCDF4.Dataset(file_GPI, mode='r')
 
     mirror_dir = ['M9','M6','M3','P0','P3','P6']
@@ -47,12 +49,15 @@ def get_oplus(l1=None, anc=None, epoch=100, stripe=3, bkgcor=False):
     local_time = anc.variables['ICON_ANCILLARY_FUVA_TANGENTPOINTS_LST'][idx, -1, 2]
 
     limb_i = np.where(np.squeeze(tanalts)>=limb)[0]
-    br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_CLEAN' % mirror_dir[stripe]][idx,:]
+    # br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_CLEAN' % mirror_dir[stripe]][idx,:]
+    br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[stripe]][idx,:]
     if bkgcor is True:
-        # br -= np.nanmedian(br[tanalts>400])
-        med = np.median(br[10:50])
-        med=0 if med>0 else med
-        br -= med
+        # # br -= np.nanmedian(br[tanalts>400])
+        # med = np.median(br[10:50])
+        # med=0 if med>0 else med
+        # br -= med
+        bkg = np.linspace(-200,-50,256)
+        br -= bkg
     br = br[limb_i]
     unmasked_ind = nan_checker(br)
     limb_i0 = limb_i[unmasked_ind]
@@ -84,4 +89,4 @@ def get_oplus(l1=None, anc=None, epoch=100, stripe=3, bkgcor=False):
         reg_param=reg_param
     )
 
-    return Ne, h_centered
+    return Ne, h_centered, br

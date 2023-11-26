@@ -106,7 +106,8 @@ def lastfile(x):
     """
     Sort all the files complying with `x` alphabetically and return the last.
     """
-    y = glob.glob(x, recursive=True)
+    # y = glob.glob(x, recursive=True)
+    y = glob.glob(x)
     y.sort()
     assert len(y) > 0, 'No file found with the given name'
     return y[-1]
@@ -234,9 +235,9 @@ def sliding_min(x, winsize=5, mode='reflect'):
         return out
 
 
-def get_br(date='2020-01-03', epoch=300, stripe=None, v=3, r=0, size='full', swapaxes=False, mode=2):
+def get_br(date='2020-01-03', epoch=300, stripe=None, v=5, r=0, size='full', swapaxes=False, mode=2):
     i0 = 256 if size=='full' else 156
-    path_dir = '/home/kamo/resources/iconfuv/nc_files/'
+    path_dir = '/home/kamo/resources/icon-fuv/ncfiles/'
     file_l1 = path_dir + 'l1/ICON_L1_FUV_SWP_{}_v{:02d}r{:03d}.NC'.format(date,v,r)
     # file_anc = path_dir + 'l0/ICON_L0P_FUV_Ancillary_{}_v01r000.NC'.format(date)
     l1 = netCDF4.Dataset(file_l1, mode='r')
@@ -257,23 +258,30 @@ def get_br(date='2020-01-03', epoch=300, stripe=None, v=3, r=0, size='full', swa
     print('Epoch:{}\nNight:{}\nNight Inds:[{}-{}]'.format(epoch, night, night_ind[0], night_ind[-1]))
     if stripe is not None:
         br = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[stripe]][idxs[night_ind],256-i0:]
+        brc = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_CLEAN' % mirror_dir[stripe]][idxs[night_ind],256-i0:]
         br_err = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[stripe]][idxs[night_ind],256-i0:].filled(fill_value=0)
         br.fill_value = br.min()
         br = br.filled()
+        brc.fill_value = brc.min()
+        brc = brc.filled()
         if swapaxes is True:
             br = br.swapaxes(0,1)
             br_err = br_err.swapaxes(0,1)
-        return br, br_err
+            brc = brc.swapaxes(0,1)
+        return brc, br, br_err
     br = np.zeros((6, len(night_ind), i0))
+    brc = np.zeros((6, len(night_ind), i0))
     br_err = np.zeros((6, len(night_ind), i0))
     for i in range(6):
         br[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s' % mirror_dir[i]][idxs[night_ind],256-i0:].filled(fill_value=0)
+        brc[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_CLEAN' % mirror_dir[i]][idxs[night_ind],256-i0:].filled(fill_value=0)
         br_err[i] = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_Error' % mirror_dir[i]][idxs[night_ind],256-i0:].filled(fill_value=0)
     if swapaxes is True:
         br = br.swapaxes(1,2)
         br_err = br_err.swapaxes(1,2)
+        brc = brc.swapaxes(1,2)
     l1.close()
-    return br, br_err
+    return brc, br, br_err
 
 def get_br_nights(l1, anc=None, target_mode='night'):
     target_mode = 2 if target_mode=='night' else 1
