@@ -19,11 +19,11 @@ def profiler(l1, err=False, clean=False):
         profname = 'ICON_L1_FUVA_SWP_PROF_'
 
     br = l1.variables[profname+'{}{}'.format(mirror_dir[0], foo)][:]
-    profiles = np.zeros((6, br.shape[0], br.shape[1]))
+    profiles = np.ma.zeros((6, br.shape[0], br.shape[1]))
     for i in range(6):
         profiles[i] = l1.variables[profname+'{}{}'.format(mirror_dir[i], foo)][:]
     if err is True:
-        profiles_err = np.zeros((6, br.shape[0], br.shape[1]))
+        profiles_err = np.ma.zeros((6, br.shape[0], br.shape[1]))
         for i in range(6):
             profiles_err[i] = l1.variables[profname+'%s_Error' % mirror_dir[i]][:]
         profiles = np.swapaxes(profiles, 1, 2)
@@ -106,7 +106,7 @@ def lastfile(x):
     """
     Sort all the files complying with `x` alphabetically and return the last.
     """
-    y = glob.glob(x)
+    y = glob.glob(x, recursive=True)
     y.sort()
     assert len(y) > 0, 'No file found with the given name'
     return y[-1]
@@ -287,10 +287,10 @@ def get_br_nights(l1, anc=None, target_mode='night'):
     mode = l1.variables['ICON_L1_FUV_Mode'][:]
     mode_night = (mode == target_mode).astype(np.int)
     if anc is not None:
-        alt = anc.variables[f'ICON_ANCILLARY_FUV{channel}_TANGENTPOINTS_LATLONALT'][:,:,:,2]
+        alt = anc.variables['ICON_ANCILLARY_FUV{}_TANGENTPOINTS_LATLONALT'.format(channel)][:,:,:,2]
         ind = np.sum(alt<300, axis=1) - 1
         xx, yy = np.meshgrid(np.arange(alt.shape[0]), np.arange(6), indexing='ij')
-        sza = anc.variables[f'ICON_ANCILLARY_FUV{channel}_TANGENTPOINTS_SZA'][:]
+        sza = anc.variables['ICON_ANCILLARY_FUV{}_TANGENTPOINTS_SZA'.format(channel)][:]
         sza300 = np.min(sza[xx,ind,yy], axis=1)
     nights = np.diff(mode_night, prepend=0)
     nights[nights==-1] = 0
@@ -305,12 +305,12 @@ def get_br_nights(l1, anc=None, target_mode='night'):
         night_ind = np.where(nights==night)[0]
         br = np.ma.zeros((6, len(night_ind), 256))
         brc = np.ma.zeros((6, len(night_ind), 256))
-        br_err = np.zeros((6, len(night_ind), 256))
+        br_err = np.ma.zeros((6, len(night_ind), 256))
         mask = np.zeros_like(br, dtype=np.bool)
         for i in range(6):
-            br[i] = l1.variables[f'{prefix}_PROF_%s' % mirror_dir[i]][idxs[night_ind],:]
-            brc[i] = l1.variables[f'{prefix}_PROF_%s_CLEAN' % mirror_dir[i]][idxs[night_ind],:]
-            br_err[i] = l1.variables[f'{prefix}_PROF_%s_Error' % mirror_dir[i]][idxs[night_ind],:].filled(fill_value=0)
+            br[i] = l1.variables['{}_PROF_{}'.format(prefix,mirror_dir[i])][idxs[night_ind],:]
+            brc[i] = l1.variables['{}_PROF_{}_CLEAN'.format(prefix,mirror_dir[i])][idxs[night_ind],:]
+            br_err[i] = l1.variables['{}_PROF_{}_Error'.format(prefix,mirror_dir[i])][idxs[night_ind],:].filled(fill_value=0)
             mask[i] = br[i].mask
         br = br_nan_filler(br, mode='median')
         brc = br_nan_filler(brc, mode='median')
@@ -328,8 +328,8 @@ def get_br_nights(l1, anc=None, target_mode='night'):
 def br_nan_filler(br, mode='median'):
     if mode=='median':
         br_filled = br.copy()
-        filltop = np.nanmedian(br[:,:,:30], axis=(0,2))
-        fillbot = np.nanmedian(br[:,:,-30:], axis=(0,2))
+        filltop = np.nanmedian(br[:,:,:20], axis=(0,2))
+        fillbot = np.nanmedian(br[:,:,-20:], axis=(0,2))
         br_filled[:,:,:30] = br[:,:,:30].filled(fill_value=filltop[None,:,None])
         br_filled[:,:,-30:] = br[:,:,-30:].filled(fill_value=fillbot[None,:,None])
         br_filled[:,:,30:-30] = br[:,:,30:-30].filled(fill_value=0)

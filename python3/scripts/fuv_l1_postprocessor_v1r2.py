@@ -1,18 +1,40 @@
-# Ulas Kamaci - 2022-02-01
-# artifact_removal_v2.1
-# Given a day of brightness profiles in Rayleighs, performs star removal and hot
-# pixel correction on the profiles. The star removal module is a neural network.
-# History:
-# v2.1: fix the torch.load() error due to using cpu instead of cuda by providing
-#       the map_location argument
+# Ulas Kamaci - 2022-04-17
+# ICON FUV L1 Post-processing code.
 
+import os
+os.environ["OMP_NUM_THREADS"] = "1" # export OMP_NUM_THREADS=1
+os.environ["OPENBLAS_NUM_THREADS"] = "1" # export OPENBLAS_NUM_THREADS=1
+os.environ["MKL_NUM_THREADS"] = "1" # export MKL_NUM_THREADS=1
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1" # export VECLIB_MAXIMUM_THREADS=1
+os.environ["NUMEXPR_NUM_THREADS"] = "1" # export NUMEXPR_NUM_THREADS=1
+import tensorflow as tf
+tf.config.threading.set_intra_op_parallelism_threads(1)
+tf.config.threading.set_inter_op_parallelism_threads(1)
+import sys, torch, netCDF4, datetime, fnmatch
 import numpy as np
 from scipy.ndimage import median_filter, convolve1d
 from scipy.signal import convolve2d
 from keras.models import load_model
-import os, torch
 import torch.nn as nn
 import torch.nn.functional as F
+from shutil import copyfile
+
+################ Version Control ################
+postprocessor_version = 1
+postprocessor_revision = 2
+# Postprocessor History:
+# v1r1 [2022-04-06]: Rather than generating new artifact removed variables in
+# 'file_out', the software replaces the existing ones with the newly generated
+# artifact removed profiles. - Ulas Kamaci
+# v1r2 [2022-04-17]: Update the day/night boundary detection algorithm to be
+# less sensitive. Prevent code from crashing if index=0 is chosen as the day
+# index. Limit the number of threads used by python and the tensorflow library
+# to prevent the thread creation error.
+
+artifact_removal_version = 2
+artifact_removal_revision = 2
+# Artifact Removal History:
+# v2r2 [2022-03-24]: neural network based star removal is implemented. - Ulas Kamaci
 
 ################ Neural Network ################
 class DoubleConv(nn.Module):
@@ -121,7 +143,7 @@ class UNet(nn.Module):
 
 def predictor(br, network, mode):
     '''
-    Function to generate run the neural network on the data to remove stars.
+    Function to run the neural network on the data to remove stars.
 
     Args:
         br (ndarray): (6,orbit_ind,256) array of brightness profiles in
@@ -243,7 +265,10 @@ def daynight_index(br, threshold=30):
     y1 = np.diff(y)
     ind = np.sort(np.where(y>threshold)[0])
     for i in ind:
-        if y1[i] > 5:
+        if i >= len(y1):
+            break
+        k = min(len(y1)-i, 30) # take the mean of last 30 epochs
+        if (y1[i] > 5) & (y[i] < y[-k:].mean()) & ((y1[i:].max()>10) | (i>0.75*len(y1))):
             index = i
             break
     return index
@@ -277,6 +302,8 @@ def artifact_removal_orbit(br, mode, network):
         except:
             # in case there is an error
             index = br.shape[1]
+        if index == 0: # in case index==0, don't even do anything (predictor crashes)
+            return br
         # apply star removal to remove the bright stars which can effect the
         # hot pixel correction algotihm
         _, br_corrected = medfilt3d(br[:,:index,:], threshold=50, mode=mode)
@@ -320,6 +347,20 @@ def br_nan_filler(br, mode='median'):
 
     return br_filled
 
+def profiler(l1, channel):
+    mirror_dir = ['M9','M6','M3','P0','P3','P6']
+    if channel==1:
+        profname = 'ICON_L1_FUVA_SWP_PROF_'
+    else:
+        profname = 'ICON_L1_FUVB_LWP_PROF_'
+
+    br = l1.variables[profname+'{}'.format(mirror_dir[0])][:]
+    profiles = np.ma.zeros((6, br.shape[0], br.shape[1]))
+    for i in range(6):
+        profiles[i] = l1.variables[profname+'{}'.format(mirror_dir[i])][:]
+
+    return profiles
+
 def artifact_removal(profiles, channel, fuv_mode, path_to_networks):
     '''
     Performs hot pixel correction on one day of profiles.
@@ -328,7 +369,7 @@ def artifact_removal(profiles, channel, fuv_mode, path_to_networks):
 
     Args:
         profiles (ndarray): 1 day of all stripe profiles in Rayleighs with
-            dimension [6,256,epoch]
+            dimension [6,epoch,256]
         channel (int): integer specifying the FUV channel (1:SW, 2:LW)
         fuv_mode (ndarray): ICON_L1_FUV_Mode variable where 1:day, 2:night
         path_to_networks (str): full path to the folder containing the neural
@@ -338,9 +379,6 @@ def artifact_removal(profiles, channel, fuv_mode, path_to_networks):
         profiles_cleaned (ndarray): artifact removed profiles, same dimension
             as profiles
     '''
-    # swap the epoch and altitude axes of the profiles
-    profiles = np.swapaxes(profiles, 1, 2)
-
     # initialize the neural networks
     device = torch.device('cpu')
     day_network_file = os.path.join(path_to_networks,'day_network_v1r0.pth')
@@ -370,7 +408,7 @@ def artifact_removal(profiles, channel, fuv_mode, path_to_networks):
             network = day_network
         elif mode==2:
             network = night_network
-        mode_orbit = (fuv_mode == mode).astype(np.int)
+        mode_orbit = (fuv_mode == mode).astype(np.int32)
         orbits = np.diff(mode_orbit, prepend=0)
         orbits[orbits==-1] = 0
         idxs = np.where(fuv_mode==mode)[0][:]
@@ -388,6 +426,136 @@ def artifact_removal(profiles, channel, fuv_mode, path_to_networks):
     profiles_cleaned.mask = profiles.mask
     profiles_cleaned = profiles_cleaned.filled(fill_value=np.nan)
 
-    # swap the epoch and altitude axes back again to match the input dimension
-    profiles_cleaned = np.swapaxes(profiles_cleaned, 1, 2)
     return profiles_cleaned
+
+def create_var(
+    nc,
+    var_name,
+    ref_var,
+    data,
+    **kwargs
+):
+    '''
+    Given a netCDF4 dataset, this function creates a new variable in the dataset
+    with the name given by `var_name`. The new variable is initially assigned
+    the same attributes as the `ref_var` which is a netCDF4 variable. The data
+    of the new variable is assigned the values of the numpy array `data`. The
+    kwargs hold any specific attributes that will be assigned to (or changed in)
+    the variable.
+
+    Args:
+        nc (netCDF4.Dataset): the netCDF dataset to be operated on
+        var_name (str): string specifying the new variable name
+        ref_var (netCDF4.Variable): the reference variable whose attributes are
+            copied to the new variable
+        data (numpy.ndarray): array whose values are copied into the new variable
+        kwargs (dict): optional keyword arguments with attribute keys and values
+            to be assigned to the new variable.
+    Returns:
+        nc (netCDF4.Dataset): the modified netCDF dataset with the new variable
+    '''
+    nc.createVariable(var_name, ref_var.datatype, ref_var.dimensions, fill_value=ref_var.FILLVAL)
+    nc.variables[var_name].setncatts(ref_var.__dict__)
+    nc.variables[var_name][:] = data
+    for key, value in kwargs.items():
+        nc.variables[var_name].setncattr(key, value)
+    return nc
+
+def create_vars(
+    l1,
+    channel,
+    profiles,
+    task='artifact_removal'
+):
+    '''
+    Create new variables in the given l1 netCDF dataset with the appropriate
+    attributes and values based on the provided task and the profiles.
+
+    Args:
+        l1 (netCDF4.Dataset): the netCDF dataset to be operated on
+        channel (int): 1: SWP channel, 2: LWP channel
+        profiles (numpy.ndarray): array whose values are copied into the new variable
+        task (str): string specifying the task, which determines the names and
+            the attributes of the created variables. 'artifact_removal' is the
+            only implemented task for now.
+
+    Returns:
+        nc (netCDF4.Dataset): the modified netCDF dataset with the new variable
+    '''
+    mirror_dir = ['M9','M6','M3','P0','P3','P6']
+    profname = 'ICON_L1_FUVA_SWP_PROF_' if channel==1 else 'ICON_L1_FUVB_LWP_PROF_'
+    for i,j in enumerate(mirror_dir):
+        if task=='artifact_removal':
+            suffix = '_CLEAN'
+            l1[profname+j+suffix][:] = profiles[i]
+            l1[profname+j+suffix].VAR_NOTES = (l1[profname+j].VAR_NOTES +
+                    ' without stars using artifact_removal_v{}r{}'.format(
+                        artifact_removal_version, artifact_removal_revision
+                    )
+            )
+        #     kwargs = {
+        #         'CATDESC': l1[profname+j].CATDESC + ' without stars',
+        #         'CONTENT': l1[profname+j].CONTENT + ' without stars',
+        #         'FIELDNAM': l1[profname+j].FIELDNAM + '_clean',
+        #         'VAR_NOTES': (l1[profname+j].VAR_NOTES +
+        #             ' without stars using artifact_removal_v{}r{}'.format(
+        #                 artifact_removal_version, artifact_removal_revision
+        #             )
+        #         )
+        #     }
+        # l1 = create_var(l1, var_name=profname+j+suffix, ref_var=l1[profname+j],
+        #     data=profiles[i], **kwargs)
+    return l1
+
+def postprocessor(
+    file_in=None,
+    file_out=None,
+    path_to_networks=None
+):
+    '''
+    Copies the L1 file at `file_in` into `file_out` and opens `file_out` in
+    writing mode. Reads the unprocessed brightness profiles in the L1 dataset
+    and generates artifact removed brightness profiles. Generates new netCDF
+    variables using the artifact removed profiles with updated attributes and
+    names, and writes them into `file_out`. The input `file_in` remains
+    untouched, and the differences between `file_in` and `file_out` are 1. their
+    name, 2. the additional variables in `file_out`, and 3. the following
+    updated global attributes: 'File_Date', 'Generation_Date', and
+    'Software_Version'.
+
+    Args:
+        file_in (str): string specifying the path to the input l1 file
+            (including its name). It can either be a SWP or a LWP file.
+        file_out (str): string specifying the path to the output l1 file
+            (including its name) to be generated.
+        path_to_networks (str): string specifying the path to the folder
+            containing the neural networks.
+
+    Returns:
+        Returns 0 on success.
+    '''
+    assert path_to_networks is not None, "Please specify path_to_networks"
+    assert ((file_in is not None) and (file_out is not None)), "Please provide both input and output paths"
+    copyfile(file_in, file_out)
+    l1 = netCDF4.Dataset(file_out, 'r+')
+    assert (l1.Instrument=='FUV-A' or l1.Instrument=='FUV-B'), "Unknown file type"
+    channel = 1 if l1.Instrument=='FUV-A' else 2
+    # Extract the uncprocessed brightness profiles
+    profiles = profiler(l1, channel=channel)
+    mode = l1.variables['ICON_L1_FUV_Mode'][:]
+    # Perform artifact removal and get the artifact removed profiles
+    profiles_clean = artifact_removal(profiles=profiles, channel=channel,
+        fuv_mode=mode, path_to_networks=path_to_networks)
+    l1 = create_vars(l1, channel, profiles_clean, task='artifact_removal')
+
+    # Modify the Global Attributes of the L1 file
+    timenow = datetime.datetime.utcnow()
+    l1.File_Date = timenow.strftime('%a, %d %b %Y, %Y-%m-%dT%H:%M:%S.%f')[:-3] + ' UTC'
+    l1.Generation_Date = timenow.strftime('%Y%m%d')
+    l1.Software_Version += ' > UIUC FUV L1 Post-Processor v{}.{}'.format(
+        postprocessor_version, postprocessor_revision)
+    l1.close()
+    return 0
+
+if __name__== "__main__":
+    postprocessor(str(sys.argv[1]), str(sys.argv[2]), str(sys.argv[3]))
