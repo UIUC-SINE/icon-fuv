@@ -88,9 +88,11 @@ def all_flagger(file_l1=None, file_l2=None, stripe=2, png_stub=None, plot=False)
                 l2.variables['ICON_L25_O_Plus_Profile_Longitude'][:,:,stripe]
             .squeeze()[orbit_ind, tanaltinds])
             satlats0 = l2.variables['ICON_L25_Observatory_Position_Latitude'][orbit_ind].squeeze()
-            satlons0 = l2.variables['ICON_L25_Observatory_Position_Longitude'][orbit_ind].squeeze()
+            satlons0 = loncorrect(l2.variables['ICON_L25_Observatory_Position_Longitude'][orbit_ind].squeeze())
+            # satlons0 = l2.variables['ICON_L25_Observatory_Position_Longitude'][orbit_ind].squeeze()
             satlats = l2.variables['ICON_L25_Observatory_Position_Latitude'][orbit_ind][tlatmask].squeeze()
-            satlons = l2.variables['ICON_L25_Observatory_Position_Longitude'][orbit_ind][tlatmask].squeeze()
+            satlons = loncorrect(l2.variables['ICON_L25_Observatory_Position_Longitude'][orbit_ind][tlatmask].squeeze())
+            # satlons = l2.variables['ICON_L25_Observatory_Position_Longitude'][orbit_ind][tlatmask].squeeze()
             tlons = tlons[tlatmask].squeeze()
             tlats = tlats0[tlatmask].squeeze()
             hmf2s = l2.variables['ICON_L25_HMF2'][orbit_ind, stripe]
@@ -269,7 +271,7 @@ def all_flagger(file_l1=None, file_l2=None, stripe=2, png_stub=None, plot=False)
                 # plt.close(fig)
                 plt.close('all')
         except Exception as e:
-            # raise
+            raise
             if hasattr(e, 'message'):
                 print ('Exception on orbit: {}: {}'.format(orbit_str, e.message))
             else:
@@ -321,87 +323,110 @@ if __name__=='__main__':
     # # plt.show()
 
     # %% cell0
-    files_l1 = glob.glob(path_dir + 'l1/*SWP_2022*')
-    files_l2 = glob.glob(path_dir + 'l2/2022/*')
-    files_l1.sort()
-    files_l2.sort()
-    stripe=2
+    # files_l1 = glob.glob(path_dir + 'l1/*SWP_2022*')
+    # files_l2 = glob.glob(path_dir + 'l2/2022/*')
+    # files_l1.sort()
+    # files_l2.sort()
+    # stripe=2
     path_fig = path_dir + 'figures/aurora_flagging/all_flagger'
-    if not os.path.exists(path_fig):
-        os.mkdir(path_fig)
+    # if not os.path.exists(path_fig):
+    #     os.mkdir(path_fig)
 
-    nighttime_counter = 0
-    flag_counter = 0
-    asymm_flag_counter = 0 
-    asymm_tec_flag_counter = 0 
-    aurora_flag_counter = 0
-    qual1_counter = 0
-    qual1flag_counter = 0
-    asymm_qual1flag_counter = 0 
-    asymm_tec_qual1flag_counter = 0 
-    aurora_qual1flag_counter = 0
-    hmf2s_all = []
-    qual1flag_locs = []
-    asymm_qual1flag_locs = []
-    asymm_tec_qual1flag_locs = []
-    aurora_qual1flag_locs = []
+    # nighttime_counter = 0
+    # flag_counter = 0
+    # asymm_flag_counter = 0 
+    # asymm_tec_flag_counter = 0 
+    # aurora_flag_counter = 0
+    # qual1_counter = 0
+    # qual1flag_counter = 0
+    # asymm_qual1flag_counter = 0 
+    # asymm_tec_qual1flag_counter = 0 
+    # aurora_qual1flag_counter = 0
+    # hmf2s_all = []
+    # qual1flag_locs = []
+    # asymm_qual1flag_locs = []
+    # asymm_tec_qual1flag_locs = []
+    # aurora_qual1flag_locs = []
 
-    for file_l1,file_l2 in tqdm(zip(files_l1[:], files_l2[:])):
-        (nighttime_ctr, 
-        flag_ctr, 
-        asymm_flag_ctr,
-        asymm_tec_flag_ctr,
-        aurora_flag_ctr,
-        qual1_ctr,
-        qual1flag_ctr,
-        asymm_qual1flag_ctr,
-        asymm_tec_qual1flag_ctr,
-        aurora_qual1flag_ctr,
-        hmf2_all,
-        qual1flag_loc,
-        asymm_qual1flag_loc,
-        asymm_tec_qual1flag_loc,
-        aurora_qual1flag_loc
-        ) = all_flagger(file_l1=file_l1, file_l2=file_l2, stripe=stripe, plot=True,
-            png_stub=path_fig+'/'+file_l2[-41:-3]+'_str%d'%stripe+'.png')
+    # for file_l1,file_l2 in tqdm(zip(files_l1[:], files_l2[:])):
+    #     (nighttime_ctr, 
+    #     flag_ctr, 
+    #     asymm_flag_ctr,
+    #     asymm_tec_flag_ctr,
+    #     aurora_flag_ctr,
+    #     qual1_ctr,
+    #     qual1flag_ctr,
+    #     asymm_qual1flag_ctr,
+    #     asymm_tec_qual1flag_ctr,
+    #     aurora_qual1flag_ctr,
+    #     hmf2_all,
+    #     qual1flag_loc,
+    #     asymm_qual1flag_loc,
+    #     asymm_tec_qual1flag_loc,
+    #     aurora_qual1flag_loc
+    #     ) = all_flagger(file_l1=file_l1, file_l2=file_l2, stripe=stripe, plot=True,
+    #         png_stub=path_fig+'/'+file_l2[-41:-3]+'_str%d'%stripe+'.png')
 
-        nighttime_counter += nighttime_ctr
-        flag_counter += flag_ctr
-        asymm_flag_counter += asymm_flag_ctr 
-        asymm_tec_flag_counter += asymm_tec_flag_ctr 
-        aurora_flag_counter += aurora_flag_ctr
-        qual1_counter += qual1_ctr
-        qual1flag_counter += qual1flag_ctr
-        asymm_qual1flag_counter += asymm_qual1flag_ctr 
-        asymm_tec_qual1flag_counter += asymm_tec_qual1flag_ctr 
-        aurora_qual1flag_counter += aurora_qual1flag_ctr
-        hmf2s_all.extend(hmf2_all)
-        qual1flag_locs.extend(qual1flag_loc)
-        asymm_qual1flag_locs.extend(asymm_qual1flag_loc)
-        asymm_tec_qual1flag_locs.extend(asymm_tec_qual1flag_loc)
-        aurora_qual1flag_locs.extend(aurora_qual1flag_loc)
+    #     nighttime_counter += nighttime_ctr
+    #     flag_counter += flag_ctr
+    #     asymm_flag_counter += asymm_flag_ctr 
+    #     asymm_tec_flag_counter += asymm_tec_flag_ctr 
+    #     aurora_flag_counter += aurora_flag_ctr
+    #     qual1_counter += qual1_ctr
+    #     qual1flag_counter += qual1flag_ctr
+    #     asymm_qual1flag_counter += asymm_qual1flag_ctr 
+    #     asymm_tec_qual1flag_counter += asymm_tec_qual1flag_ctr 
+    #     aurora_qual1flag_counter += aurora_qual1flag_ctr
+    #     hmf2s_all.extend(hmf2_all)
+    #     qual1flag_locs.extend(qual1flag_loc)
+    #     asymm_qual1flag_locs.extend(asymm_qual1flag_loc)
+    #     asymm_tec_qual1flag_locs.extend(asymm_tec_qual1flag_loc)
+    #     aurora_qual1flag_locs.extend(aurora_qual1flag_loc)
 
-    hmf2s_all = np.array(hmf2s_all)
-    qual1flag_locs = np.array(qual1flag_locs)
-    asymm_qual1flag_locs = np.array(asymm_qual1flag_locs)
-    asymm_tec_qual1flag_locs = np.array(asymm_tec_qual1flag_locs)
-    aurora_qual1flag_locs = np.array(aurora_qual1flag_locs)
+    # hmf2s_all = np.array(hmf2s_all)
+    # qual1flag_locs = np.array(qual1flag_locs)
+    # asymm_qual1flag_locs = np.array(asymm_qual1flag_locs)
+    # asymm_tec_qual1flag_locs = np.array(asymm_tec_qual1flag_locs)
+    # aurora_qual1flag_locs = np.array(aurora_qual1flag_locs)
 
+    # np.save(path_fig+'/hmf2s_all.npy', hmf2s_all)
+    # np.save(path_fig+'/qual1flag_locs.npy', qual1flag_locs)
+    # np.save(path_fig+'/asymm_qual1flag_locs.npy', asymm_qual1flag_locs)
+    # np.save(path_fig+'/asymm_tec_qual1flag_locs.npy', asymm_tec_qual1flag_locs)
+    # np.save(path_fig+'/aurora_qual1flag_locs.npy', aurora_qual1flag_locs)
 
-    print('Nighttime Counter: {}'.format(nighttime_counter))
-    print('All Flag Counter: {} ({:.1f}%)'.format(flag_counter, 100*flag_counter/nighttime_counter))
-    print('Asymm Flag Counter: {} ({:.1f}%)'.format(asymm_flag_counter, 100*asymm_flag_counter/nighttime_counter))
-    print('Asymm Tec Flag Counter: {} ({:.1f}%)'.format(asymm_tec_flag_counter, 100*asymm_tec_flag_counter/nighttime_counter))
-    print('Aurora Flag Counter: {} ({:.1f}%)'.format(aurora_flag_counter, 100*aurora_flag_counter/nighttime_counter))
-    print('Qual=1 Counter: {}'.format(qual1_counter))
-    print('Flag (Qual=1) Counter: {} ({:.1f}%)'.format(qual1flag_counter, 100*qual1flag_counter/qual1_counter))
-    print('Asymm Flag (Qual=1) Counter: {} ({:.1f}%)'.format(asymm_qual1flag_counter, 100*asymm_qual1flag_counter/qual1_counter))
-    print('Asymm Tec Flag (Qual=1) Counter: {} ({:.1f}%)'.format(asymm_tec_qual1flag_counter, 100*asymm_tec_qual1flag_counter/qual1_counter))
-    print('Aurora Flag (Qual=1) Counter: {} ({:.1f}%)'.format(aurora_qual1flag_counter, 100*aurora_qual1flag_counter/qual1_counter))
+    # print('Nighttime Counter: {}'.format(nighttime_counter))
+    # print('All Flag Counter: {} ({:.1f}%)'.format(flag_counter, 100*flag_counter/nighttime_counter))
+    # print('Asymm Flag Counter: {} ({:.1f}%)'.format(asymm_flag_counter, 100*asymm_flag_counter/nighttime_counter))
+    # print('Asymm Tec Flag Counter: {} ({:.1f}%)'.format(asymm_tec_flag_counter, 100*asymm_tec_flag_counter/nighttime_counter))
+    # print('Aurora Flag Counter: {} ({:.1f}%)'.format(aurora_flag_counter, 100*aurora_flag_counter/nighttime_counter))
+    # print('Qual=1 Counter: {}'.format(qual1_counter))
+    # print('Flag (Qual=1) Counter: {} ({:.1f}%)'.format(qual1flag_counter, 100*qual1flag_counter/qual1_counter))
+    # print('Asymm Flag (Qual=1) Counter: {} ({:.1f}%)'.format(asymm_qual1flag_counter, 100*asymm_qual1flag_counter/qual1_counter))
+    # print('Asymm Tec Flag (Qual=1) Counter: {} ({:.1f}%)'.format(asymm_tec_qual1flag_counter, 100*asymm_tec_qual1flag_counter/qual1_counter))
+    # print('Aurora Flag (Qual=1) Counter: {} ({:.1f}%)'.format(aurora_qual1flag_counter, 100*aurora_qual1flag_counter/qual1_counter))
+
+    hmf2s_all = np.load(path_fig+'/hmf2s_all.npy')
+    qual1flag_locs = np.load(path_fig+'/qual1flag_locs.npy')
+    asymm_qual1flag_locs = np.load(path_fig+'/asymm_qual1flag_locs.npy')
+    asymm_tec_qual1flag_locs = np.load(path_fig+'/asymm_tec_qual1flag_locs.npy')
+    aurora_qual1flag_locs = np.load(path_fig+'/aurora_qual1flag_locs.npy')
 
     plt.figure()
     (cts1, bins, bar) = plt.hist(hmf2s_all, 40, edgecolor='black', label='All')
     (cts2, bins, bar) = plt.hist(hmf2s_all[~qual1flag_locs], bins=bins, edgecolor='black', label='Flagged')
+    # (cts2, bins) = np.histogram(hmf2s_flagged, bins=bins)
+    # (cts3, bins, bar) = plt.hist(bins[:-1], bins[:], weights=cts1-cts2, edgecolor='black', label='Flagged')
+    plt.title('Histogram of All vs All-Flagged HmF2s of 2022')
+    plt.xlabel('L2.5 HmF2 (km)')
+    plt.ylabel('Counts')
+    plt.legend()
+    plt.show()
+    plt.savefig(path_fig+'/hmf2_hist_all_vs_all_flagged.png', dpi=300)
+
+    plt.figure()
+    (cts1, bins, bar) = plt.hist(hmf2s_all, 40, edgecolor='black', label='All')
+    (cts2, bins, bar) = plt.hist(hmf2s_all[~aurora_qual1flag_locs], bins=bins, edgecolor='black', label='Flagged')
     # (cts2, bins) = np.histogram(hmf2s_flagged, bins=bins)
     # (cts3, bins, bar) = plt.hist(bins[:-1], bins[:], weights=cts1-cts2, edgecolor='black', label='Flagged')
     plt.title('Histogram of All vs Aurora-Flagged HmF2s of 2022')
@@ -410,6 +435,30 @@ if __name__=='__main__':
     plt.legend()
     plt.show()
     plt.savefig(path_fig+'/hmf2_hist_all_vs_aurora_flagged.png', dpi=300)
+
+    plt.figure()
+    (cts1, bins, bar) = plt.hist(hmf2s_all, 40, edgecolor='black', label='All')
+    (cts2, bins, bar) = plt.hist(hmf2s_all[~asymm_qual1flag_locs], bins=bins, edgecolor='black', label='Flagged')
+    # (cts2, bins) = np.histogram(hmf2s_flagged, bins=bins)
+    # (cts3, bins, bar) = plt.hist(bins[:-1], bins[:], weights=cts1-cts2, edgecolor='black', label='Flagged')
+    plt.title('Histogram of All vs Asymm-Flagged HmF2s of 2022')
+    plt.xlabel('L2.5 HmF2 (km)')
+    plt.ylabel('Counts')
+    plt.legend()
+    plt.show()
+    plt.savefig(path_fig+'/hmf2_hist_all_vs_asymm_flagged.png', dpi=300)
+
+    plt.figure()
+    (cts1, bins, bar) = plt.hist(hmf2s_all, 40, edgecolor='black', label='All')
+    (cts2, bins, bar) = plt.hist(hmf2s_all[~asymm_tec_qual1flag_locs], bins=bins, edgecolor='black', label='Flagged')
+    # (cts2, bins) = np.histogram(hmf2s_flagged, bins=bins)
+    # (cts3, bins, bar) = plt.hist(bins[:-1], bins[:], weights=cts1-cts2, edgecolor='black', label='Flagged')
+    plt.title('Histogram of All vs Asymm TEC-Flagged HmF2s of 2022')
+    plt.xlabel('L2.5 HmF2 (km)')
+    plt.ylabel('Counts')
+    plt.legend()
+    plt.show()
+    plt.savefig(path_fig+'/hmf2_hist_all_vs_asymm_tec_flagged.png', dpi=300)
 
 # # %% plot
 # if 'metric' not in locals():
