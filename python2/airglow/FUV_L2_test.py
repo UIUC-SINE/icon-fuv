@@ -13,7 +13,7 @@ Todo:
 # These need to be manually changed, when necessary.
 # NOTE: When the major version is updated, you should change the History global attribute
 software_version_major = 4 # Should only be incremented on major changes
-software_version_minor = 2 # [0-99], increment on ALL published changes, resetting when the major version changes
+software_version_minor = 3 # [0-99], increment on ALL published changes, resetting when the major version changes
 software_version = float(software_version_major)+software_version_minor/1000.
 ####################################################################################################
 
@@ -1246,7 +1246,11 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
     ncfile.File_Date =                      t_file.strftime('%a, %d %b %Y, %Y-%m-%dT%H:%M:%S.%f')[:-3] + ' UTC'
     ncfile.Generated_By =                   'ICON SDC > ICON UIUC FUV L2.5 Processor v%.3f, J. J. Makela, D. Iliou' % software_version
     ncfile.Generation_Date =                t_file.strftime('%Y%m%d')
-    ncfile.setncattr_string('History',      ['FUV L2.5 Processor v4.02: Although there is no change in the L2.5 software, there has been significant updates in the FUV '
+    ncfile.setncattr_string('History',      ['FUV L2.5 Processor v4.03: Two additional warning flags, aurora and asymmetry, have been implemented to warn the users about the '
+                                            'profiles contaminated by aurora signal and where the spherical symmetry assumption fails, respectively. This update results '
+                                            'in a 5-10% decrease in the quality=1 data with respect to Version 5 data product. With this update, the data product version will '
+                                            'be upgraded to Version 6. U. Kamaci, 12 December 2023. \n'
+                                            'FUV L2.5 Processor v4.02: Although there is no change in the L2.5 software, there has been significant updates in the FUV '
                                             'Level-1 software such as updated calibrations and star removal software, that the data version of the L2.5 files are getting '
                                             'upgraded to v5. This version provides more accurate altitude profiles, NmF2, and hmF2 estimates. U. Kamaci, 5 May 2022. \n'
                                             'FUV L2.5 Processor v4.01: Enable retrievals from the data with non-zero turret angles. Update the quality determination '
@@ -1619,7 +1623,10 @@ def FUV_Level_2_OutputProduct_NetCDF(L25_full_fn, L25_dict):
 "8: Low input signal level (low brightness). Makes the quality 0.5, retrieval available. \n"
 "16: Unexpected hmF2 value. Makes the quality 0.5, retrieval available. \n"
 "32: Nmf2 retrieval affected by conjugate photoelectron contribution in the measurements that is not modeled in the inversion. If the variable "
-"`ICON_L25_Sunlit_Conjugate_Raypath_Percentage` is more than 10%, this flag is activated. Makes the quality 0.5, retrieval available."
+"`ICON_L25_Sunlit_Conjugate_Raypath_Percentage` is more than 10%, this flag is activated. Makes the quality 0.5, retrieval available. \n"
+"64: Aurora contamination in the brightness profiles, impacting the retrievals. Makes the quality 0.5. Activated by very low hmF2 at high latitudes. \n"
+"128: Failure of the spherical symmetry assumption in the inversion. Makes the quality 0.5. Activated by very low hmF2 with high nmF2, which occurs when ICON flies "
+"right above an EIA crest."
 )
 
     # Inversion Method
@@ -1690,6 +1697,100 @@ def set_variable_attributes(var, catdesc, depend, displayType, Fieldname, form, 
     # 3.3.3.13
     var.Var_Type = varType
 
+
+def asymmetry_flagger(brmax, brmax_alt):
+    asymm_flag = np.zeros(len(brmax), dtype=bool)
+
+    asymm_center = (brmax>100) & (brmax_alt<200)
+    asymm_center = asymm_center.data
+    asymm_center_int = asymm_center.astype(int)
+    asymm_check = np.convolve(asymm_center_int, np.ones(7), 'valid')
+
+    if np.nanmax(asymm_check) >= 5:
+        asymm_center = np.nanargmax( np.convolve(asymm_center_int, np.hamming(13), 'valid') )
+
+        asymm_flag = np.zeros(len(brmax), dtype=bool)
+        asymm_flag[max(0,asymm_center-25):asymm_center+25] = True
+
+        asymm_flag = asymm_flag & (brmax_alt < 250)
+    
+    return asymm_flag
+
+
+def aurora_flagger(brmax_alt, brmax_tlat):
+    aurora_flag = (brmax_tlat>30) & (brmax_alt<220)
+    return aurora_flag
+
+def aurora_asymmetry_flagger(l1=None, l25_dict=None):
+    stripe = 2
+    mirror_dir = ['M9','M6','M3','P0','P3','P6']
+    mode = l1.variables['ICON_L1_FUV_Mode'][:]
+
+    # Get variables from netCDF file
+    dn = [] # UTC
+    for d in l25_dict['FUV_CENTER_TIMES']:
+        dn.append(parser.parse(d))
+    dn = np.array(dn)
+
+    orbits = l25_dict['ICON_ORBIT'][:]
+
+    orbit_list = orbits
+
+    for orbit in np.unique(orbit_list):
+        try:
+            orbit_ind = np.squeeze(np.where(orbits == orbit))
+
+            if orbit_ind.size < 2:
+                continue
+
+            ds = np.array([i.total_seconds() for i in dn-dn[orbit_ind][0]])
+            orbit_ind = np.squeeze(np.where(abs(ds) < 2000.))
+
+            idx = np.where(mode==2)[0][orbit_ind]
+
+            Y = l25_dict['FUV_TANGENT_ALT'][orbit_ind,:,stripe]
+            X = np.transpose([dn,]*Y.shape[1])[orbit_ind]
+            Y = np.ma.array(Y, mask=np.isnan(Y)).filled(np.nanmax(Y))
+            T = l25_dict['FUV_TANGENT_LAT'][orbit_ind,:,stripe]
+            T = np.ma.array(T, mask=np.isnan(T)).filled(np.nanmax(T))
+            Z = l25_dict['FUV_Ne'][orbit_ind,:,stripe]
+            Z = np.ma.array(Z, mask=np.isnan(Z))
+            brc = l1.variables['ICON_L1_FUVA_SWP_PROF_%s_CLEAN' % mirror_dir[stripe]][idx,:]
+
+            out = np.diff(X,axis=0)
+            mask = np.vstack([out > datetime.timedelta(seconds=24),np.ones([1,np.size(out,1)],dtype=bool)])
+            Zm = np.ma.MaskedArray(Z,mask)
+            Bmc = np.ma.ones(Zm.shape)*Zm # brightness counterpart
+            maskcounts = np.sum(Zm.mask==True, axis=1)
+            for i in range(Bmc.shape[0]):
+                Bmc[i,maskcounts[i]:] = brc[i][::-1][:Bmc.shape[1]-maskcounts[i]]
+
+            # Peak brightness
+            brmax = Bmc.max(axis=1)
+            brmax_alt = Y[range(len(brmax)), Bmc.argmax(axis=1)]
+            brmax_tlat = T[range(len(brmax)), Bmc.argmax(axis=1)]
+
+            aurora_flag = aurora_flagger(brmax_alt, brmax_tlat)
+            asymm_flag = asymmetry_flagger(brmax, brmax_alt) 
+
+            if orbit_ind.size < 2:
+                continue
+
+            flag_locations = asymm_flag | aurora_flag
+            # deactivate the asymm flag locations where aurora_flag is active
+            asymm_flag[aurora_flag] = 0
+
+            for st in [0,1,2,3,4,5]:
+                locs = flag_locations & (l25_dict['FUV_Quality'][orbit_ind, st]==1)
+                l25_dict['FUV_Quality'][orbit_ind[locs], st] = 0.5
+
+                l25_dict['FUV_Quality_Flags'][orbit_ind, st] += (64*aurora_flag +
+                    128*asymm_flag)
+
+        except Exception as e:
+            continue
+
+    return l25_dict
 
 '''
 FUV LEVEL 2 TOP LEVEL FUNCTION
@@ -2049,6 +2150,8 @@ def Get_lvl2_5_product(file_input = None,
         'param_fn': None,
         'acknowledgement': data.Acknowledgement
     }
+
+    L25_dict = aurora_asymmetry_flagger(l1=data, l25_dict=L25_dict)
 
     # Close the input netCDF files
     ancillary.close()
